@@ -47,10 +47,10 @@ See [ChatMode.md](ChatMode.md) for more chat features.
 python ollama_prompt.py --list-prompts
 
 # Use custom user prompt
-python ollama_prompt.py --prompt-file user_prompts/mortgage_advice.md
+python ollama_prompt.py --prompt-file user_prompts/smart_contract_explanation.md
 
 # Add system prompt
-python ollama_prompt.py --system-file system_prompts/expert_financial_advisor.md
+python ollama_prompt.py --system-file system_prompts/blockchain_educator.md
 ```
 
 ## Output Options

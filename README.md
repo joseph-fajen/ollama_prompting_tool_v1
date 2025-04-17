@@ -65,7 +65,7 @@ python ollama_prompt.py
 
 ### Run a specific model with system and user prompts
 ```bash
-python ollama_prompt.py --model llama3:8b --system-file system_prompts/helpful_assistant.md --prompt-file user_prompts/heloc_advice.md
+python ollama_prompt.py --model llama3:8b --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
 ```
 
 ### Run on multiple models in parallel

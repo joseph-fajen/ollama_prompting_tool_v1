@@ -30,7 +30,8 @@ During a chat session, you can use these commands:
 | `/load [id]` | Load a conversation by ID or select from a list |
 | `/new [title]` | Start a new conversation with optional title |
 | `/delete [id]` | Delete a conversation by ID or select from a list |
-| `/system [prompt]` | Set or update the system prompt |
+| `/system [prompt]` | Set or update the system prompt with direct text |
+| `/system file:filename.md` | Load system prompt from system_prompts directory |
 | `/clear` | Clear the current conversation history |
 | `/show` | Show the current conversation |
 | `/model [name]` | Switch to a different model |
@@ -46,7 +47,7 @@ python ollama_chat.py --list-conversations
 python ollama_chat.py --load-conversation abc123
 
 # Start with a system prompt
-python ollama_chat.py --system-file system_prompts/expert_financial_advisor.md
+python ollama_chat.py --system-file system_prompts/blockchain_educator.md
 ```
 
 ## API Compatibility
@@ -100,7 +101,7 @@ The chat tool still supports one-shot prompts without entering chat mode:
 python ollama_chat.py --prompt "Explain quantum computing in simple terms"
 
 # One-shot prompt from file
-python ollama_chat.py --prompt-file user_prompts/mortgage_advice.md
+python ollama_chat.py --prompt-file user_prompts/smart_contract_explanation.md
 ```
 
 ## Conversation History Format
@@ -137,8 +138,43 @@ The implementation uses an adapter pattern to support different LLM APIs:
    - `HuggingFaceAdapter`: For Hugging Face Inference API
 3. **Factory**: `LLMAdapterFactory` creates the appropriate adapter based on configuration
 
+## Output File Naming
+
+When using `ollama_prompt.py`, the response filenames now include both the system prompt and user prompt filenames:
+
+```
+modelname_sys-prompt_filename_usr-prompt_filename_timestamp.md
+```
+
+For example:
+```
+llama3_8b_sys-blockchain_educator_usr-consensus_mechanism_comparison_20250417_120000.md
+```
+
+This makes it easier to identify which system and user prompts were used for each response without having to open the file.
+
+Inside the output files, the metadata section now includes:
+```
+**System Prompt:** blockchain_educator
+**User Prompt:** consensus_mechanism_comparison
+```
+
+For the chat mode in `ollama_chat.py`, this information is stored in the conversation metadata.
+
 ## Common Issues
 
 - **API Keys**: OpenAI and Hugging Face providers require API keys
 - **Message Format**: Different providers may handle system prompts differently
 - **Chat History**: Some models have context length limitations affecting how much history can be retained
+
+## Available Blockchain-Related Prompts
+
+### System Prompts
+- `blockchain_educator.md` - Expert in explaining blockchain concepts clearly
+- `blockchain_tech_writer.md` - Technical writer specializing in blockchain documentation
+- `blockchain_ux_writer.md` - Focuses on user-friendly blockchain explanations
+
+### User Prompts
+- `smart_contract_explanation.md` - Requests explanation of smart contracts
+- `consensus_mechanism_comparison.md` - Asks for comparison of blockchain consensus mechanisms
+- `wallet_setup_guide.md` - Prompts for wallet setup instructions

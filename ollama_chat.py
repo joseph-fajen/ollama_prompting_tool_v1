@@ -54,9 +54,10 @@ class ChatClient:
         """Get a list of all available models"""
         return self.adapter.get_available_models()
     
-    def set_system_prompt(self, system_prompt):
+    def set_system_prompt(self, system_prompt, system_filename=None):
         """Set a system prompt that will be used for all conversations"""
         self.system_prompt = system_prompt
+        self.system_filename = system_filename or "direct_input"
         
         # Add to current conversation if it exists
         current_conv = self.conversation_manager.get_current_conversation()
@@ -65,10 +66,16 @@ class ChatClient:
             if current_conv.messages[0].role == "system":
                 # Update existing system message
                 current_conv.messages[0].content = system_prompt
+                # Add metadata for filename
+                current_conv.metadata = current_conv.metadata or {}
+                current_conv.metadata["system_filename"] = self.system_filename
             else:
                 # Insert system message at beginning
                 system_msg = Message("system", system_prompt)
                 current_conv.messages.insert(0, system_msg)
+                # Add metadata for filename
+                current_conv.metadata = current_conv.metadata or {}
+                current_conv.metadata["system_filename"] = self.system_filename
     
     def start_new_conversation(self, title=None):
         """Start a new conversation"""
@@ -221,25 +228,42 @@ class ChatClient:
             else:
                 self._select_conversation_to_delete()
         elif cmd == "/system":
-            new_system = " ".join(parts[1:])
-            if new_system:
-                self.set_system_prompt(new_system)
-                self.console.print("[bold green]System prompt updated[/bold green]")
+            if len(parts) > 1 and parts[1].startswith("file:"):
+                # Load system prompt from file
+                filename = parts[1][5:]  # Remove the "file:" prefix
+                system_content = _get_prompt_content(f"system_prompts/{filename}")
+                if system_content:
+                    system_filename = os.path.splitext(os.path.basename(filename))[0]
+                    self.set_system_prompt(system_content, system_filename)
+                    self.console.print(f"[bold green]System prompt loaded from file: {filename}[/bold green]")
+                else:
+                    self.console.print(f"[bold red]Could not load system prompt from file: {filename}[/bold red]")
             else:
-                self.console.print("[bold yellow]Please provide a system prompt[/bold yellow]")
+                # Direct system prompt text
+                new_system = " ".join(parts[1:])
+                if new_system:
+                    self.set_system_prompt(new_system, "direct_input")
+                    self.console.print("[bold green]System prompt updated[/bold green]")
+                else:
+                    self.console.print("[bold yellow]Please provide a system prompt or use file:[filename][/bold yellow]")
         elif cmd == "/clear":
             current = self.conversation_manager.get_current_conversation()
             if current:
                 # Keep system message if it exists
                 system_msg = None
+                system_filename = None
                 if current.messages and current.messages[0].role == "system":
                     system_msg = current.messages[0].content
+                    system_filename = current.metadata.get("system_filename", "direct_input")
                 
                 current.clear()
                 
                 # Re-add system message if it existed
                 if system_msg:
                     current.add_message("system", system_msg)
+                    # Restore metadata
+                    current.metadata = current.metadata or {}
+                    current.metadata["system_filename"] = system_filename
                 
                 self.console.print("[bold green]Conversation cleared[/bold green]")
         elif cmd == "/show":
@@ -272,7 +296,8 @@ class ChatClient:
             ("/load [id]", "Load a conversation by ID or select from list"),
             ("/new [title]", "Start a new conversation with optional title"),
             ("/delete [id]", "Delete a conversation by ID or select from list"),
-            ("/system [prompt]", "Set or update the system prompt"),
+            ("/system [prompt]", "Set or update the system prompt with direct text"),
+            ("/system file:filename.md", "Load system prompt from system_prompts directory"),
             ("/clear", "Clear the current conversation history"),
             ("/show", "Show the current conversation"),
             ("/model [name]", "Switch to a different model"),
@@ -485,7 +510,9 @@ def main():
     if args.system_file:
         system_prompt = _get_prompt_content(args.system_file)
         if system_prompt:
-            client.set_system_prompt(system_prompt)
+            # Extract filename without extension
+            system_filename = os.path.splitext(os.path.basename(args.system_file))[0]
+            client.set_system_prompt(system_prompt, system_filename)
     
     # Get available models
     available_models = client.get_installed_models()
@@ -514,12 +541,21 @@ def main():
     # Handle one-shot prompt
     if args.prompt or args.prompt_file:
         prompt = args.prompt
+        prompt_filename = "direct_input"
+        
         if args.prompt_file:
             prompt = _get_prompt_content(args.prompt_file)
+            prompt_filename = os.path.splitext(os.path.basename(args.prompt_file))[0]
             
         if not prompt:
             client.console.print("[bold red]No prompt provided![/bold red]")
             return
+        
+        # Store prompt filename in conversation metadata
+        current_conv = client.conversation_manager.get_current_conversation()
+        if current_conv:
+            current_conv.metadata = current_conv.metadata or {}
+            current_conv.metadata["prompt_filename"] = prompt_filename
             
         client.generate_response(model, prompt, stream=args.stream, timeout=args.timeout)
         

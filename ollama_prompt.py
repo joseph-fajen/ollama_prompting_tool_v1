@@ -115,10 +115,6 @@ class OllamaClient:
             self._batch_folder = f"ollama_responses/batch_{batch_timestamp}"
             os.makedirs(self._batch_folder, exist_ok=True)
         
-        # Create a filename based on the model
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{self._batch_folder}/{model.replace(':', '_')}_{timestamp}.md"
-        
         # Extract system prompt and user prompt if combined
         system_prompt = None
         main_prompt = prompt
@@ -130,12 +126,22 @@ class OllamaClient:
             if prompt.startswith(system_prompt):
                 main_prompt = prompt[len(system_prompt):].lstrip('\n')
         
+        # Get prompt filenames if available (or 'direct_input' if not from file)
+        system_filename = getattr(self, '_system_filename', 'no_system')
+        user_filename = getattr(self, '_user_filename', 'direct_input') 
+        
+        # Create a filename based on the model and prompt filenames
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{self._batch_folder}/{model.replace(':', '_')}_sys-{system_filename}_usr-{user_filename}_{timestamp}.md"
+        
         # Use context manager for file I/O
         try:
             with open(filename, "w") as f:
                 f.write(f"# Ollama Response - {model}\n\n")
                 f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"**Model:** {model}\n")
+                f.write(f"**System Prompt:** {system_filename}\n")
+                f.write(f"**User Prompt:** {user_filename}\n")
                 f.write(f"**Response Time:** {elapsed_time:.2f} seconds\n\n")
                 
                 # Add system prompt section if available
@@ -335,26 +341,40 @@ def display_interactive_cli_menu(client):
     
     # 2. Select user prompt
     console.print("\n[bold]2. Select a user prompt:[/bold]")
-    all_user_prompts = [("Default HELOC prompt", None)]
+    all_user_prompts = []
     if user_prompt_files:
         for file in user_prompt_files:
             all_user_prompts.append((os.path.basename(file), file))
+    else:
+        console.print("[yellow]No user prompts found in user_prompts/ directory[/yellow]")
     
     for i, (prompt_name, _) in enumerate(all_user_prompts):
         console.print(f"  {i+1}. {prompt_name}")
     
-    prompt_choice = input("\nEnter your user prompt choice (number): ")
-    try:
-        prompt_idx = int(prompt_choice) - 1
-        if 0 <= prompt_idx < len(all_user_prompts):
-            selected_prompt = all_user_prompts[prompt_idx][1]
-            console.print(f"[green]Selected user prompt: {all_user_prompts[prompt_idx][0]}[/green]")
-        else:
-            console.print("[bold red]Invalid choice. Using default user prompt.[/bold red]")
+    # Only ask for input if user prompts are available
+    selected_prompt = None
+    if all_user_prompts:
+        prompt_choice = input("\nEnter your user prompt choice (number): ")
+        try:
+            prompt_idx = int(prompt_choice) - 1
+            if 0 <= prompt_idx < len(all_user_prompts):
+                selected_prompt = all_user_prompts[prompt_idx][1]
+                prompt_name = all_user_prompts[prompt_idx][0]
+                # Store user prompt filename (for output naming)
+                client._user_filename = os.path.splitext(os.path.basename(selected_prompt))[0]
+                console.print(f"[green]Selected user prompt: {prompt_name}[/green]")
+            else:
+                console.print("[bold red]Invalid choice. No prompt selected. You will be asked to enter a prompt directly.[/bold red]")
+                selected_prompt = None
+                client._user_filename = "direct_input"
+        except ValueError:
+            console.print("[bold red]Invalid input. No prompt selected. You will be asked to enter a prompt directly.[/bold red]")
             selected_prompt = None
-    except ValueError:
-        console.print("[bold red]Invalid input. Using default user prompt.[/bold red]")
+            client._user_filename = "direct_input"
+    else:
+        console.print("[bold yellow]No user prompts available. You will be asked to enter a prompt directly.[/bold yellow]")
         selected_prompt = None
+        client._user_filename = "direct_input"
     
     # 3. Select system prompt (optional)
     system_prompt_options = [("None", None)]
@@ -371,13 +391,21 @@ def display_interactive_cli_menu(client):
         system_idx = int(system_choice) - 1
         if 0 <= system_idx < len(system_prompt_options):
             selected_system = system_prompt_options[system_idx][1]
-            console.print(f"[green]Selected system prompt: {system_prompt_options[system_idx][0]}[/green]")
+            system_name = system_prompt_options[system_idx][0]
+            # Store system filename (for output naming) if a file was selected
+            if selected_system:
+                client._system_filename = os.path.splitext(system_name)[0]
+            else:
+                client._system_filename = "no_system"
+            console.print(f"[green]Selected system prompt: {system_name}[/green]")
         else:
             console.print("[bold red]Invalid choice. Using no system prompt.[/bold red]")
             selected_system = None
+            client._system_filename = "no_system"
     except ValueError:
         console.print("[bold red]Invalid input. Using no system prompt.[/bold red]")
         selected_system = None
+        client._system_filename = "no_system"
     
     # 4. Stream output?
     console.print("\n[bold]4. Output mode:[/bold]")
@@ -596,31 +624,37 @@ def main():
         system_prompt = get_prompt_content(system_file)
         if system_prompt is None:
             return
+        # Store system filename (basename without extension) for output naming
+        client._system_filename = os.path.splitext(os.path.basename(system_file))[0]
+    else:
+        client._system_filename = "no_system"
     
-    # Get user prompt content from file or use the default HELOC prompt
+    # Get user prompt content from file or ask for direct input
     if prompt_file:
         main_prompt = get_prompt_content(prompt_file)
         if main_prompt is None:
             return
+        # Store user prompt filename (basename without extension) for output naming
+        client._user_filename = os.path.splitext(os.path.basename(prompt_file))[0]
     else:
-        main_prompt = """Act as an expert financial advisor specializing in home equity products for homeowners in Portland, Oregon, U.S.A. You have extensive knowledge of the local real estate market, current interest rate trends, and the specific offerings of regional and national lenders serving the Portland area.
-
-Provide comprehensive guidance for homeowners exploring Home Equity Lines of Credit (HELOCs), covering:
-
-1. Current market conditions in Portland affecting HELOC rates and terms
-2. Step-by-step process for evaluating whether a HELOC is the right financial tool
-3. How to calculate the maximum amount a homeowner might qualify for
-4. Key terminology homeowners should understand before speaking with lenders
-5. Critical comparison points between different HELOC offers (interest rates, fees, draw periods, repayment terms)
-6. Red flags and potential pitfalls to watch for in HELOC agreements
-7. Essential questions homeowners should ask lenders
-8. Documentation homeowners should prepare before applying
-9. Strategies for negotiating better terms
-10. Alternative financing options if a HELOC isn't ideal for their situation
-11. Tax implications specific to Oregon residents
-12. How Portland's housing market trends might affect long-term HELOC strategy
-
-When advising, balance technical financial accuracy with practical, easy-to-understand explanations. Include specific examples where helpful. Focus particularly on protecting homeowners from predatory lending practices and hidden fees, while helping them identify truly beneficial opportunities."""
+        # Ask user for direct input
+        console = Console()
+        console.print("\n[bold]No prompt file selected. Please enter your prompt directly:[/bold]")
+        console.print("[dim]Type your prompt below. When finished, press Enter twice (leave a blank line).[/dim]")
+        
+        lines = []
+        while True:
+            line = input()
+            if not line and lines and not lines[-1]:  # Two consecutive empty lines
+                break
+            lines.append(line)
+        
+        main_prompt = "\n".join(lines).strip()
+        if not main_prompt:
+            console.print("[bold red]No prompt provided. Exiting.[/bold red]")
+            return
+            
+        client._user_filename = "direct_input"
     
     # Store the system prompt in the client object for access in save_response
     client._system_prompt = system_prompt
@@ -641,7 +675,7 @@ When advising, balance technical financial accuracy with practical, easy-to-unde
     # Display a summary of what will run
     console = Console()
     model_str = models_to_run[0] if len(models_to_run) == 1 else f"{len(models_to_run)} models"
-    prompt_str = os.path.basename(prompt_file) if prompt_file else "Default HELOC prompt"
+    prompt_str = os.path.basename(prompt_file) if prompt_file else "Direct user input"
     system_str = os.path.basename(system_file) if system_file else "None"
     
     console.print("\n[bold]Running with:[/bold]")

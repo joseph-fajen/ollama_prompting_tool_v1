@@ -40,8 +40,8 @@ def test_write_config():
     test_config = {
         "base_url": "http://localhost:11434",
         "default_model": "llama3:8b",
-        "default_system_prompt": "system_prompts/expert_financial_advisor.md",
-        "default_user_prompt": "user_prompts/heloc_advice.md",
+        "default_system_prompt": "system_prompts/blockchain_educator.md",
+        "default_user_prompt": "user_prompts/smart_contract_explanation.md",
         "default_stream": True,
         "default_save": True,
         "default_max_workers": 4,
@@ -96,8 +96,8 @@ def test_args_to_config():
         def __init__(self):
             self.model = "phi3:mini"
             self.models = None
-            self.system_file = "system_prompts/creative_writer.md"
-            self.prompt_file = "user_prompts/story_starter.md"
+            self.system_file = "system_prompts/blockchain_tech_writer.md"
+            self.prompt_file = "user_prompts/wallet_setup_guide.md"
             self.stream = True
             self.save = True
             self.max_workers = 2
