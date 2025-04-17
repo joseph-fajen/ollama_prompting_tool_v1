@@ -53,11 +53,32 @@ python ollama_chat.py --system-file system_prompts/expert_financial_advisor.md
 
 The chat tool supports multiple LLM providers through an adapter pattern.
 
+### API Key Management
+
+The chat tool offers several methods to securely manage your API keys:
+
+```bash
+# Interactive API key setup (recommended)
+python ollama_chat.py --setup-keys
+
+# Provide key directly on command line (not recommended for shared systems)
+python ollama_chat.py --provider openai --api-key your_api_key
+
+# Use environment variable
+export OLLAMA_TOOL_OPENAI_API_KEY=your_api_key
+python ollama_chat.py --provider openai
+```
+
+API keys are stored securely using:
+1. System keyring (most secure, uses OS credential storage)
+2. Encrypted config file in user's home directory
+3. Environment variables
+
 ### OpenAI-Compatible APIs
 
 ```bash
-# Use an OpenAI-compatible API
-python ollama_chat.py --provider openai --api-key your_api_key
+# Use OpenAI API with stored key
+python ollama_chat.py --provider openai
 
 # Custom OpenAI-compatible endpoint (like LMStudio, LocalAI, or Ollama with OpenAI compatibility layer)
 python ollama_chat.py --provider openai --base-url http://localhost:8080 --api-key none
@@ -66,8 +87,8 @@ python ollama_chat.py --provider openai --base-url http://localhost:8080 --api-k
 ### Hugging Face Inference API
 
 ```bash
-# Use Hugging Face models
-python ollama_chat.py --provider huggingface --api-key your_api_key --model mistralai/Mistral-7B-Instruct-v0.1
+# Use Hugging Face models with stored key
+python ollama_chat.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
 ```
 
 ## One-Shot Mode (Backward Compatibility)

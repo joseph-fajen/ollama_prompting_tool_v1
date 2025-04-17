@@ -17,13 +17,23 @@ from rich import box
 import config_manager
 from conversation_manager import ConversationManager, Message, Conversation
 from api_adapters import LLMAdapterFactory
+from api_key_manager import ApiKeyManager
 
 class ChatClient:
     def __init__(self, provider="ollama", **kwargs):
         # Set up configuration
         config = config_manager.load_config()
         self.base_url = kwargs.get("base_url") or config.get("base_url", "http://localhost:11434")
-        self.api_key = kwargs.get("api_key") or config.get("api_key")
+        
+        # Set up API key management
+        self.key_manager = ApiKeyManager()
+        supplied_key = kwargs.get("api_key")
+        
+        # Get API key (prioritize command line arg, then get from manager)
+        if supplied_key:
+            self.api_key = supplied_key
+        else:
+            self.api_key = self.key_manager.get_api_key(provider)
         
         # Set up adapter
         self.provider = provider
@@ -427,9 +437,16 @@ def main():
     api_group.add_argument("--base-url", type=str, help="API base URL")
     api_group.add_argument("--api-key", type=str, help="API key (required for OpenAI and HuggingFace)")
     api_group.add_argument("--timeout", type=int, default=300, help="Timeout for API requests in seconds")
+    api_group.add_argument("--setup-keys", action="store_true", help="Run interactive API key setup and exit")
     
     # Parse arguments
     args = parser.parse_args()
+    
+    # Handle API key setup if requested
+    if args.setup_keys:
+        from api_key_manager import setup_api_keys
+        setup_api_keys()
+        return
     
     # Create directories if they don't exist
     os.makedirs("ollama_conversations", exist_ok=True)
@@ -440,6 +457,24 @@ def main():
         base_url=args.base_url,
         api_key=args.api_key
     )
+    
+    # Check for API key if required provider
+    if args.provider in ["openai", "huggingface"] and not client.api_key:
+        # Try to get it interactively
+        key_manager = ApiKeyManager()
+        api_key = key_manager.prompt_for_api_key(args.provider)
+        if api_key:
+            client.api_key = api_key
+            # Recreate the adapter with the new key
+            client.adapter = LLMAdapterFactory.create_adapter(
+                args.provider,
+                base_url=client.base_url,
+                api_key=api_key
+            )
+        else:
+            print(f"\nError: {args.provider} requires an API key.")
+            print(f"You can provide it with --api-key, or set up API keys using --setup-keys")
+            return
     
     # Handle list conversations command
     if args.list_conversations:
