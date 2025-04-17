@@ -1,0 +1,11 @@
+base_url: http://localhost:11434
+config_version: '1.0'
+default_max_workers: null
+default_model: phi3:mini
+default_models: []
+default_save: true
+default_stream: false
+default_system_prompt: system_prompts/helpful_assistant.md
+default_timeout: 1200
+default_user_prompt: user_prompts/smart_contract_architecture.md
+use_menu: true

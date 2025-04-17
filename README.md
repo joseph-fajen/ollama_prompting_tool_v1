@@ -1,0 +1,96 @@
+# Ollama LLM Runner
+
+A Python utility for running prompts on local Ollama LLM models with parallel execution support.
+
+## Quick Start
+
+See [QuickStart.md](QuickStart.md) for common commands and basic usage.
+
+## Features
+
+- Interactive CLI menu for easy model and prompt selection
+- Support for system prompts and user prompts from files
+- Parallel model execution for faster multi-model processing
+- Streaming or batch response modes
+- Response saving to markdown files
+- Progress tracking with rich console output
+- Persistent configuration system to save default settings
+
+## Prerequisites
+
+- Python 3.6+
+- [Ollama](https://ollama.ai/) installed locally
+- Required packages: `pip install requests rich`
+
+## Getting Started
+
+Before running this script, ensure the Ollama service is running:
+
+```bash
+ollama serve
+```
+
+This starts the Ollama API server on http://localhost:11434.
+
+## Common Issues
+
+- **404 Not Found**: Ollama service not running or model name mismatch
+- **400 Bad Request**: Trying to use an embedding model for text generation
+
+## Prompt Organization
+
+The script uses two directories for managing prompts:
+
+- `system_prompts/`: Contains AI role or persona definitions
+- `user_prompts/`: Contains specific tasks or questions
+
+List available prompts with: `python ollama_prompt.py --list-prompts`
+
+## Response Files
+
+- Responses are saved in timestamped batch folders in `ollama_responses/`
+- Files include model info, timing, original prompt, and complete response
+- Batch organization makes comparing results across models easy
+
+## Examples
+
+### Run with interactive menu
+```bash
+python ollama_prompt.py
+```
+
+### Run a specific model with system and user prompts
+```bash
+python ollama_prompt.py --model llama3:8b --system-file system_prompts/helpful_assistant.md --prompt-file user_prompts/heloc_advice.md
+```
+
+### Run on multiple models in parallel
+```bash
+python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini --max-workers 4
+```
+
+For more examples, see [test_examples.md](test_examples.md).
+
+## Configuration System
+
+The script now includes a configuration system that persists your preferred settings:
+
+- Configurations are stored in `config/ollama_config.yaml`
+- Display current settings with `python ollama_prompt.py --show-config`
+- Save current run settings as defaults with `python ollama_prompt.py --save-config`
+- Reset configuration to defaults with `python ollama_prompt.py --reset-config`
+
+You can configure default values for:
+- Default model(s) to use
+- Default system and user prompts
+- Output preferences (streaming, saving responses)
+- Performance options (max workers, timeout)
+- Custom Ollama API URL
+
+## Default Behavior
+
+- If no options are specified, uses values from configuration
+- If no configuration exists, falls back to these defaults:
+  - If no prompt file is specified, uses default HELOC financial advice prompt
+  - If no system prompt is specified, only the user prompt is used
+  - If no model is specified, runs on all available models
