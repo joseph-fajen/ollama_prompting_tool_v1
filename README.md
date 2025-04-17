@@ -1,10 +1,11 @@
 # Ollama LLM Runner
 
-A Python utility for running prompts on local Ollama LLM models with parallel execution support.
+A Python utility for running prompts on local Ollama LLM models with parallel execution support and interactive chat mode.
 
 ## Quick Start
 
 See [QuickStart.md](QuickStart.md) for common commands and basic usage.
+See [ChatMode.md](ChatMode.md) for using the new chat mode and API compatibility features.
 
 ## Features
 
@@ -15,6 +16,9 @@ See [QuickStart.md](QuickStart.md) for common commands and basic usage.
 - Response saving to markdown files
 - Progress tracking with rich console output
 - Persistent configuration system to save default settings
+- **New:** Interactive chat mode with conversation history
+- **New:** Support for multiple LLM providers (Ollama, OpenAI, Hugging Face)
+- **New:** Conversation management (save/load/list conversations)
 
 ## Prerequisites
 

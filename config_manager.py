@@ -14,7 +14,11 @@ DEFAULT_CONFIG = {
     "default_timeout": 1200,
     "use_menu": True,
     "default_models": [],  # Specific list of models to use
-    "config_version": "1.0"
+    "default_provider": "ollama",  # API provider (ollama, openai, huggingface)
+    "api_key": None,  # API key for OpenAI or HuggingFace
+    "openai_base_url": "https://api.openai.com",  # Base URL for OpenAI API
+    "default_chat_mode": False,  # Use chat mode by default
+    "config_version": "1.1"  # Updated version
 }
 
 # Constants

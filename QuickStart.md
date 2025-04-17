@@ -1,6 +1,6 @@
 # Ollama Prompt CLI - QuickStart
 
-## Basic Usage
+## Basic Usage - One-Shot Mode
 
 ```bash
 # Interactive menu
@@ -18,6 +18,24 @@ python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini
 # All models
 python ollama_prompt.py --all-models
 ```
+
+## Chat Mode
+
+```bash
+# Start interactive chat (new!)
+python ollama_chat.py
+
+# Chat with specific model
+python ollama_chat.py --model llama3:8b
+
+# Chat with streaming (recommended)
+python ollama_chat.py --stream
+
+# Use alternate provider
+python ollama_chat.py --provider openai --api-key your_key
+```
+
+See [ChatMode.md](ChatMode.md) for more chat features.
 
 ## Custom Prompts
 
