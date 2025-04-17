@@ -1,6 +1,6 @@
-# Ollama LLM Runner
+# Multi-Provider LLM Runner
 
-A Python utility for running prompts on local Ollama LLM models with parallel execution support and interactive chat mode.
+A Python utility for running prompts on LLM models from multiple providers (Ollama, OpenAI, HuggingFace) with parallel execution support and interactive chat mode.
 
 ## Quick Start
 
@@ -23,12 +23,17 @@ See [ChatMode.md](ChatMode.md) for using the new chat mode and API compatibility
 ## Prerequisites
 
 - Python 3.6+
-- [Ollama](https://ollama.ai/) installed locally
-- Required packages: `pip install requests rich`
+- Required packages: `pip install requests rich keyring pyyaml`
+- For Ollama provider:
+  - [Ollama](https://ollama.ai/) installed locally
+  - At least one model installed
+- For other providers:
+  - Valid API keys for OpenAI or HuggingFace
 
 ## Getting Started
 
-Before running this script, ensure the Ollama service is running:
+### For Ollama Provider
+Before using the Ollama provider (default), ensure the Ollama service is running:
 
 ```bash
 ollama serve
@@ -36,10 +41,19 @@ ollama serve
 
 This starts the Ollama API server on http://localhost:11434.
 
+### For Other Providers
+For OpenAI or HuggingFace, set up your API keys (only needed once):
+
+```bash
+python ollama_prompt.py --setup-keys
+```
+
 ## Common Issues
 
 - **404 Not Found**: Ollama service not running or model name mismatch
 - **400 Bad Request**: Trying to use an embedding model for text generation
+- **401 Unauthorized**: Invalid API key for OpenAI or HuggingFace
+- **403 Forbidden**: Insufficient permissions with the provided API key
 
 ## Prompt Organization
 
@@ -71,6 +85,15 @@ python ollama_prompt.py --model llama3:8b --system-file system_prompts/blockchai
 ### Run on multiple models in parallel
 ```bash
 python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini --max-workers 4
+```
+
+### Use different providers
+```bash
+# OpenAI provider
+python ollama_prompt.py --provider openai --model gpt-3.5-turbo --system-file system_prompts/blockchain_educator.md
+
+# HuggingFace provider
+python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
 ```
 
 For more examples, see [test_examples.md](test_examples.md).
@@ -128,17 +151,22 @@ The script now includes a configuration system that persists your preferred sett
 - Reset configuration to defaults with `python ollama_prompt.py --reset-config`
 
 You can configure default values for:
-- Default model(s) to use
+- Default provider (Ollama, OpenAI, HuggingFace)
+- Default model(s) to use for each provider
 - Default system and user prompts
 - Output preferences (streaming, saving responses)
 - Performance options (max workers, timeout)
-- Custom Ollama API URL
-- API provider settings (provider type, API keys)
+- Custom API URLs for different providers
+- API key handling preferences
 
 ## Default Behavior
 
 - If no options are specified, uses values from configuration
 - If no configuration exists, falls back to these defaults:
-  - If no prompt file is specified, uses default HELOC financial advice prompt
+  - Provider: Ollama
+  - If no prompt file is specified, interactive input is requested
   - If no system prompt is specified, only the user prompt is used
-  - If no model is specified, runs on all available models
+  - If no model is specified:
+    - For Ollama: runs on all available models
+    - For OpenAI: uses gpt-3.5-turbo
+    - For HuggingFace: uses mistralai/Mistral-7B-Instruct-v0.1

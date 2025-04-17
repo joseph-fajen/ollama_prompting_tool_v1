@@ -140,21 +140,24 @@ The implementation uses an adapter pattern to support different LLM APIs:
 
 ## Output File Naming
 
-When using `ollama_prompt.py`, the response filenames now include both the system prompt and user prompt filenames:
+When using `ollama_prompt.py`, the response filenames now include the provider, model, and both the system prompt and user prompt filenames:
 
 ```
-modelname_sys-prompt_filename_usr-prompt_filename_timestamp.md
+provider_modelname_sys-prompt_filename_usr-prompt_filename_timestamp.md
 ```
 
 For example:
 ```
-llama3_8b_sys-blockchain_educator_usr-consensus_mechanism_comparison_20250417_120000.md
+ollama_llama3_8b_sys-blockchain_educator_usr-consensus_mechanism_comparison_20250417_120000.md
+huggingface_mistral_7b_instruct_sys-blockchain_educator_usr-smart_contract_explanation_20250417_120000.md
 ```
 
 This makes it easier to identify which system and user prompts were used for each response without having to open the file.
 
 Inside the output files, the metadata section now includes:
 ```
+**Provider:** ollama
+**Model:** llama3:8b
 **System Prompt:** blockchain_educator
 **User Prompt:** consensus_mechanism_comparison
 ```

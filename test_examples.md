@@ -1,13 +1,13 @@
-# Ollama Prompt Script Test Examples
+# LLM Prompt Script Test Examples
 
-This document provides example test cases that demonstrate the flexibility of the Ollama prompt script with different system prompts and user prompts. Each example shows how to run the script with specific combinations to illustrate various use cases.
+This document provides example test cases that demonstrate the flexibility of the prompt script with different providers, system prompts, and user prompts. Each example shows how to run the script with specific combinations to illustrate various use cases.
 
 ## Example 1: Blockchain Education with Educator System Prompt
 
 This example uses the blockchain educator system prompt with the smart contract explanation user prompt to generate specialized technical guidance.
 
 ```bash
-python ollama_prompt.py --model llama3:8b --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
+python ollama_prompt.py --provider ollama --model llama3:8b --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
 ```
 
 **What it demonstrates:** How a specialized system prompt (blockchain educator) enhances domain-specific responses when combined with a detailed query about smart contracts.
@@ -80,9 +80,37 @@ python ollama_prompt.py --all-models --system-file system_prompts/blockchain_edu
 
 **What it demonstrates:** How to easily benchmark all available models with the same prompt combination.
 
-## Example 8: Using Multiple API Providers with Chat Mode
+## Example 8: Using Multiple API Providers
 
 This example demonstrates how to use different API providers with secure API key management.
+
+```bash
+# First, set up your API keys securely (one-time setup)
+python ollama_prompt.py --setup-keys
+
+# One-shot mode with OpenAI API
+python ollama_prompt.py --provider openai --model gpt-3.5-turbo --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
+
+# One-shot mode with Hugging Face model
+python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1 --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
+```
+
+**Alternative API key methods:**
+
+```bash
+# Using environment variables (more secure than command line)
+export OLLAMA_TOOL_OPENAI_API_KEY=your_key_here
+python ollama_prompt.py --provider openai --model gpt-3.5-turbo
+
+# Direct command line (least secure, not recommended for shared systems)
+python ollama_prompt.py --provider openai --api-key your_key_here --model gpt-3.5-turbo
+```
+
+**What it demonstrates:** How to securely use multiple API providers with one-shot prompts while keeping your API keys safe.
+
+## Example 9: Using Multiple API Providers with Chat Mode
+
+This example demonstrates how to use different API providers in chat mode.
 
 ```bash
 # First, set up your API keys securely (one-time setup)
@@ -95,18 +123,7 @@ python ollama_chat.py --provider openai --model gpt-3.5-turbo
 python ollama_chat.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
 ```
 
-**Alternative API key methods:**
-
-```bash
-# Using environment variables (more secure than command line)
-export OLLAMA_TOOL_OPENAI_API_KEY=your_key_here
-python ollama_chat.py --provider openai
-
-# Direct command line (least secure, not recommended for shared systems)
-python ollama_chat.py --provider openai --api-key your_key_here
-```
-
-**What it demonstrates:** How to securely use multiple API providers while keeping your API keys safe.
+**What it demonstrates:** How to use interactive chat mode with different API providers.
 
 ## Creating Your Own Test Cases
 

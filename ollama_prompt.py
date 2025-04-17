@@ -12,8 +12,229 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.progress import Progress, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 
-# Import configuration manager
+# Import configuration manager and API adapters
 import config_manager
+import api_adapters
+import api_key_manager
+
+class AdapterWrapper:
+    """Wrapper class to make LLMAdapter compatible with OllamaClient interface"""
+    
+    def __init__(self, adapter, provider_name):
+        self.adapter = adapter
+        self.provider_name = provider_name
+        self.console = Console()
+        self._system_prompt = None
+        # For output filename usage
+        self._system_filename = "no_system"
+        self._user_filename = "direct_input"
+        self._batch_folder = None
+    
+    def get_installed_models(self):
+        """Get available models from the adapter"""
+        return self.adapter.get_available_models()
+    
+    def generate_response(self, model, prompt, stream=False, save=True, timeout=300):
+        """Generate a response using the adapter"""
+        start_time = time.time()
+        
+        # Convert prompt to messages format
+        messages = []
+        
+        # Extract system prompt if present
+        system_prompt = None
+        main_prompt = prompt
+        
+        if hasattr(self, '_system_prompt') and self._system_prompt:
+            system_prompt = self._system_prompt
+            # If the prompt starts with the system prompt, extract just the user prompt
+            if prompt.startswith(system_prompt):
+                main_prompt = prompt[len(system_prompt):].lstrip('\n')
+        
+        # Add system message if available
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        
+        # Add user message
+        messages.append({"role": "user", "content": main_prompt})
+        
+        try:
+            self.console.print(f"\n[bold green]Model:[/bold green] {model}")
+            self.console.print("[bold green]Response:[/bold green]\n")
+            
+            # Generate response using the adapter
+            if stream:
+                response_text = ""
+                for chunk in self.adapter.generate(model, messages, stream=True, timeout=timeout):
+                    response_text += chunk
+                    self.console.print(chunk, end="")
+                self.console.print("\n")
+            else:
+                response_text = self.adapter.generate(model, messages, stream=False, timeout=timeout)
+                # Print as formatted markdown
+                self.console.print(Markdown(response_text))
+            
+            # Calculate and display timing
+            elapsed_time = time.time() - start_time
+            self.console.print(f"\n[bold blue]Response time:[/bold blue] {elapsed_time:.2f} seconds")
+            
+            # Save response if requested
+            if save:
+                filepath = self._save_response(model, prompt, response_text, elapsed_time)
+                return response_text, filepath
+            
+            return response_text, None
+            
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            return None, None
+    
+    def _save_response(self, model, prompt, response, elapsed_time):
+        """Save the response to a file in a timestamped batch folder"""
+        # Create responses directory if it doesn't exist
+        os.makedirs("ollama_responses", exist_ok=True)
+        
+        # Create a timestamped batch folder if it doesn't exist yet
+        if not hasattr(self, '_batch_folder') or not self._batch_folder:
+            batch_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self._batch_folder = f"ollama_responses/batch_{batch_timestamp}"
+            os.makedirs(self._batch_folder, exist_ok=True)
+        
+        # Extract system prompt and user prompt if combined
+        system_prompt = None
+        main_prompt = prompt
+        
+        # Check if this is a combined prompt (system + user)
+        if hasattr(self, '_system_prompt') and self._system_prompt:
+            system_prompt = self._system_prompt
+            # If the prompt starts with the system prompt, extract just the user prompt
+            if prompt.startswith(system_prompt):
+                main_prompt = prompt[len(system_prompt):].lstrip('\n')
+        
+        # Get prompt filenames if available (or 'direct_input' if not from file)
+        system_filename = getattr(self, '_system_filename', 'no_system')
+        user_filename = getattr(self, '_user_filename', 'direct_input') 
+        
+        # Create a filename based on the model and prompt filenames
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{self._batch_folder}/{self.provider_name}_{model.replace(':', '_').replace('/', '_')}_sys-{system_filename}_usr-{user_filename}_{timestamp}.md"
+        
+        # Use context manager for file I/O
+        try:
+            with open(filename, "w") as f:
+                f.write(f"# {self.provider_name.capitalize()} Response - {model}\n\n")
+                f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"**Model:** {model}\n")
+                f.write(f"**System Prompt:** {system_filename}\n")
+                f.write(f"**User Prompt:** {user_filename}\n")
+                f.write(f"**Response Time:** {elapsed_time:.2f} seconds\n\n")
+                
+                # Add system prompt section if available
+                if system_prompt:
+                    f.write("## System Prompt\n\n")
+                    f.write(f"```\n{system_prompt}\n```\n\n")
+                
+                # Add user prompt section
+                f.write("## User Prompt\n\n")
+                f.write(f"```\n{main_prompt}\n```\n\n")
+                
+                # Add response section
+                f.write("## Response\n\n")
+                f.write(response)
+            
+            print(f"\nResponse saved to {filename}")
+            return filename
+        except Exception as e:
+            self.console.print(f"[bold red]Error saving response:[/bold red] {str(e)}")
+            return None
+    
+    def _process_model(self, model, prompt, stream=False, save=True, timeout=600):
+        """Process a single model (helper method for parallel execution)"""
+        response, filepath = self.generate_response(model, prompt, stream=stream, save=save, timeout=timeout)
+        if response:
+            return {
+                "model": model,
+                "response": response,
+                "filepath": filepath
+            }
+        return None
+    
+    def run_prompt_on_all_models(self, prompt, models=None, save=True, stream=False, max_workers=None, timeout=600):
+        """Run a prompt on all available models or a specific list of models in parallel"""
+        if not models:
+            models = self.get_installed_models()
+            
+        if not models:
+            self.console.print(f"[bold red]No {self.provider_name} models found![/bold red]")
+            return
+            
+        self.console.print(f"[bold]Running prompt on {len(models)} models:[/bold] {', '.join(models)}\n")
+        
+        results = []
+        total_start_time = time.time()
+        
+        # If stream is True, we can't use parallel execution (would mix outputs)
+        if stream:
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=self.console
+            ) as progress:
+                task = progress.add_task("[green]Running models...", total=len(models))
+                
+                for model in models:
+                    progress.update(task, description=f"[green]Running {model}...")
+                    result = self._process_model(model, prompt, stream=stream, save=save)
+                    if result:
+                        results.append(result)
+                    progress.update(task, advance=1)
+        else:
+            # Use parallel execution for non-streaming mode
+            futures = []
+            
+            # Default to number of CPU cores if max_workers not specified
+            if max_workers is None:
+                # Use CPU count or 2, whichever is higher
+                max_workers = max(2, os.cpu_count())
+            
+            with Progress(
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=self.console
+            ) as progress:
+                task = progress.add_task("[green]Running models in parallel...", total=len(models))
+                
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all jobs
+                    for model in models:
+                        future = executor.submit(self._process_model, model, prompt, stream, save, timeout)
+                        futures.append((future, model))
+                    
+                    # Process as they complete
+                    for future, model in futures:
+                        progress.update(task, description=f"[green]Running {model}...")
+                        result = future.result()
+                        if result:
+                            results.append(result)
+                        progress.update(task, advance=1)
+        
+        total_time = time.time() - total_start_time
+        
+        # Print summary
+        self.console.print(f"\n[bold]Finished running {len(models)} models in {total_time:.2f} seconds[/bold]")
+        self.console.print("\n[bold]Summary of results:[/bold]")
+        
+        for result in results:
+            self.console.print(f"[green]{result['model']}[/green]: Response saved to {result['filepath']}")
+        
+        return results
+
 
 class OllamaClient:
     def __init__(self, base_url=None):
@@ -274,17 +495,19 @@ def get_prompt_content(file_path):
         print(f"Error reading file {file_path}: {str(e)}")
         return None
 
-def display_interactive_cli_menu(client):
+def display_interactive_cli_menu(client, provider="ollama"):
     """Display an interactive CLI menu for users to select options"""
     console = Console()
-    console.print("\n[bold blue]===== Ollama Prompt CLI =====\n[/bold blue]")
-    console.print("[yellow]Welcome to the Ollama Prompt CLI![/yellow]")
-    console.print("This tool helps you run prompts on Ollama models.")
+    console.print("\n[bold blue]===== LLM Prompt CLI =====\n[/bold blue]")
+    console.print("[yellow]Welcome to the Prompt CLI![/yellow]")
+    console.print("This tool helps you run prompts on models from different providers.")
     
     # Show configuration status
     config = config_manager.load_config()
-    if config.get("default_model") or config.get("default_models"):
+    if config.get("default_model") or config.get("default_models") or config.get("default_provider"):
         console.print("\n[bold magenta]CONFIG:[/bold magenta]")
+        if config.get("default_provider"):
+            console.print(f"  • Default provider: [cyan]{config['default_provider'].capitalize()}[/cyan]")
         if config.get("default_model"):
             console.print(f"  • Default model: [green]{config['default_model']}[/green]")
         if config.get("default_models"):
@@ -317,27 +540,104 @@ def display_interactive_cli_menu(client):
     # Display menu options
     console.print("\n[bold green]Please select from the following options:[/bold green]")
     
+    # 0. Select provider
+    console.print("\n[bold]0. Select a provider:[/bold]")
+    providers = ["ollama", "openai", "huggingface"]
+    for i, provider_name in enumerate(providers):
+        console.print(f"  {i+1}. {provider_name.capitalize()}")
+    
+    provider_choice = input("\nEnter your provider choice (number or press Enter for default): ")
+    selected_provider = provider
+    try:
+        provider_idx = int(provider_choice) - 1
+        if 0 <= provider_idx < len(providers):
+            selected_provider = providers[provider_idx]
+            console.print(f"[green]Selected provider: {selected_provider.capitalize()}[/green]")
+            
+            # If switching to a non-Ollama provider, check for API key
+            if selected_provider != "ollama":
+                key_manager = api_key_manager.ApiKeyManager()
+                api_key = key_manager.get_api_key(selected_provider)
+                if not api_key:
+                    console.print(f"[bold yellow]Warning: No API key found for {selected_provider.capitalize()}[/bold yellow]")
+                    console.print(f"[bold yellow]You will be prompted for an API key later[/bold yellow]")
+        else:
+            console.print(f"[bold yellow]Invalid choice. Using default provider: {selected_provider.capitalize()}[/bold yellow]")
+    except ValueError:
+        console.print(f"[bold yellow]Invalid input. Using default provider: {selected_provider.capitalize()}[/bold yellow]")
+    
+    # If provider changed, need to recreate client/adapter
+    if selected_provider != provider:
+        if selected_provider == "ollama":
+            client = OllamaClient()
+        else:
+            # For other providers, check for API key
+            key_manager = api_key_manager.ApiKeyManager()
+            api_key = key_manager.get_api_key(selected_provider)
+            if not api_key:
+                api_key = key_manager.prompt_for_api_key(selected_provider)
+            
+            # Only proceed if we have an API key
+            if api_key:
+                try:
+                    adapter = api_adapters.LLMAdapterFactory.create_adapter(
+                        selected_provider, 
+                        api_key=api_key
+                    )
+                    client = AdapterWrapper(adapter, selected_provider)
+                except ValueError as e:
+                    console.print(f"[bold red]Error creating adapter: {str(e)}[/bold red]")
+                    console.print(f"[bold yellow]Falling back to Ollama[/bold yellow]")
+                    selected_provider = "ollama"
+                    client = OllamaClient()
+            else:
+                console.print(f"[bold red]No API key provided for {selected_provider}. Falling back to Ollama.[/bold red]")
+                selected_provider = "ollama"
+                client = OllamaClient()
+    
+    # Get available models for the selected provider
+    available_models = client.get_installed_models()
+    if not available_models:
+        if selected_provider == "ollama":
+            console.print("[bold red]No Ollama models found![/bold red]")
+            console.print("Please install models with 'ollama pull <model>' and try again.")
+            return None
+        else:
+            console.print(f"[bold red]No models available for {selected_provider}![/bold red]")
+            return None
+    
     # 1. Select model
     console.print("\n[bold]1. Select a model:[/bold]")
     for i, model in enumerate(available_models):
         console.print(f"  {i+1}. {model}")
-    console.print(f"  {len(available_models)+1}. Run on all models")
+    
+    # Only show "Run all models" for Ollama (other providers might have too many models)
+    if selected_provider == "ollama":
+        console.print(f"  {len(available_models)+1}. Run on all models")
     
     model_choice = input("\nEnter your model choice (number): ")
     try:
         model_idx = int(model_choice) - 1
-        if model_idx == len(available_models):
+        if selected_provider == "ollama" and model_idx == len(available_models):
             selected_models = available_models
             console.print(f"[green]Running on all models[/green]")
         elif 0 <= model_idx < len(available_models):
             selected_models = [available_models[model_idx]]
             console.print(f"[green]Selected model: {available_models[model_idx]}[/green]")
         else:
-            console.print("[bold red]Invalid choice. Using default (all models).[/bold red]")
-            selected_models = available_models
+            if selected_provider == "ollama":
+                console.print("[bold red]Invalid choice. Using default (all models).[/bold red]")
+                selected_models = available_models
+            else:
+                console.print(f"[bold red]Invalid choice. Using default (first model).[/bold red]")
+                selected_models = [available_models[0]]
     except ValueError:
-        console.print("[bold red]Invalid input. Using default (all models).[/bold red]")
-        selected_models = available_models
+        if selected_provider == "ollama":
+            console.print("[bold red]Invalid input. Using default (all models).[/bold red]")
+            selected_models = available_models
+        else:
+            console.print(f"[bold red]Invalid input. Using default (first model).[/bold red]")
+            selected_models = [available_models[0]]
     
     # 2. Select user prompt
     console.print("\n[bold]2. Select a user prompt:[/bold]")
@@ -426,23 +726,32 @@ def display_interactive_cli_menu(client):
     if save_config:
         console.print("[green]These settings will be saved as defaults.[/green]")
     
-    console.print("\n[bold blue]Starting Ollama generation...[/bold blue]\n")
+    console.print(f"\n[bold blue]Starting {selected_provider.capitalize()} generation...[/bold blue]\n")
     
-    return selected_models, selected_prompt, selected_system, stream, save_config
+    return selected_provider, selected_models, selected_prompt, selected_system, stream, save_config
 
 def main():
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Run prompts with Ollama models")
+    parser = argparse.ArgumentParser(description="Run prompts with LLM models from different providers")
     
     # Model selection arguments
     model_group = parser.add_argument_group("Model Selection")
     model_group.add_argument("--model", type=str,
-                        help="Ollama model to use (default: use config or all models)")
+                        help="Model to use (default: use config or all models)")
     model_group.add_argument("--all-models", action="store_true",
-                        help="Run the prompt on all installed models")
+                        help="Run the prompt on all installed models (Ollama provider only)")
     model_group.add_argument("--models", type=str, nargs="+",
                         help="List of specific models to run the prompt on")
     
+    # Provider arguments
+    provider_group = parser.add_argument_group("Provider Options")
+    provider_group.add_argument("--provider", type=str, choices=["ollama", "openai", "huggingface"],
+                        help="The LLM provider to use (default: ollama)")
+    provider_group.add_argument("--api-key", type=str,
+                        help="API key for OpenAI or HuggingFace (recommended to use environment variables instead)")
+    provider_group.add_argument("--setup-keys", action="store_true",
+                        help="Set up API keys for providers interactively")
+                        
     # Prompt arguments
     prompt_group = parser.add_argument_group("Prompt Selection")
     prompt_group.add_argument("--prompt-file", type=str,
@@ -474,7 +783,7 @@ def main():
     config_group.add_argument("--reset-config", action="store_true",
                         help="Reset configuration to defaults")
     config_group.add_argument("--base-url", type=str,
-                        help="Set Ollama API base URL (default: http://localhost:11434)")
+                        help="Set API base URL (for Ollama default: http://localhost:11434)")
     
     # Set defaults from configuration
     config = config_manager.load_config()
@@ -482,7 +791,8 @@ def main():
         save=config["default_save"],
         stream=config["default_stream"],
         all_models=False,
-        timeout=config["default_timeout"]
+        timeout=config["default_timeout"],
+        provider=config.get("default_provider", "ollama")
     )
     
     args = parser.parse_args()
@@ -490,6 +800,11 @@ def main():
     # Create necessary directories if they don't exist
     os.makedirs("system_prompts", exist_ok=True)
     os.makedirs("user_prompts", exist_ok=True)
+    
+    # Run API key setup if requested
+    if args.setup_keys:
+        api_key_manager.setup_api_keys()
+        return
     
     # Handle configuration commands
     if args.show_config:
@@ -528,12 +843,52 @@ def main():
         
         return
     
-    # Create Ollama client
-    client = OllamaClient()
+    # Get provider and possibly API key
+    provider = args.provider
+    
+    # Handle API key for non-Ollama providers
+    api_key = None
+    if provider != "ollama":
+        # Get API key from arg, environment, or keyring
+        api_key = args.api_key
+        if not api_key:
+            # Try to get from key manager
+            key_manager = api_key_manager.ApiKeyManager()
+            api_key = key_manager.get_api_key(provider)
+            
+            # If still no API key, prompt user
+            if not api_key:
+                api_key = key_manager.prompt_for_api_key(provider)
+                
+            # If still no API key, exit with error
+            if not api_key:
+                console = Console()
+                console.print(f"[bold red]Error:[/bold red] {provider.capitalize()} API key is required")
+                console.print(f"Please provide an API key using --api-key or set up keys with --setup-keys")
+                return
+    
+    # Create the appropriate client/adapter for the selected provider
+    if provider == "ollama":
+        # Use the original OllamaClient for backward compatibility
+        client = OllamaClient(base_url=args.base_url)
+    else:
+        # For other providers, use the adapter factory
+        try:
+            adapter = api_adapters.LLMAdapterFactory.create_adapter(
+                provider, 
+                api_key=api_key,
+                base_url=args.base_url
+            )
+            # Create a thin wrapper to make adapter look like OllamaClient for compatibility
+            client = AdapterWrapper(adapter, provider)
+        except ValueError as e:
+            console = Console()
+            console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            return
     
     # Check if any relevant command line arguments were provided
     # Only check for arguments that would affect model selection or prompt content
-    relevant_arg_names = ['model', 'all_models', 'prompt_file', 'system_file', 'models']
+    relevant_arg_names = ['model', 'all_models', 'prompt_file', 'system_file', 'models', 'provider']
     has_relevant_args = any(vars(args)[arg_name] for arg_name in relevant_arg_names)
     
     # Check if we should use menu based on config and args
@@ -542,12 +897,30 @@ def main():
     
     if use_menu:
         # Use interactive CLI menu
-        menu_results = display_interactive_cli_menu(client)
+        menu_results = display_interactive_cli_menu(client, provider)
         if menu_results is None:
             return
         
         try:
-            models_to_run, prompt_file, system_file, stream, save_config_from_menu = menu_results
+            menu_provider, models_to_run, prompt_file, system_file, stream, save_config_from_menu = menu_results
+            
+            # If provider changed in the menu, recreate the client
+            if menu_provider != provider:
+                provider = menu_provider
+                if provider == "ollama":
+                    client = OllamaClient(base_url=args.base_url)
+                else:
+                    # Get API key (should be already set from the menu)
+                    key_manager = api_key_manager.ApiKeyManager()
+                    api_key = key_manager.get_api_key(provider)
+                    
+                    # Create adapter
+                    adapter = api_adapters.LLMAdapterFactory.create_adapter(
+                        provider, 
+                        api_key=api_key,
+                        base_url=args.base_url
+                    )
+                    client = AdapterWrapper(adapter, provider)
         except Exception as e:
             # If there was an issue with menu results
             console = Console()
@@ -575,31 +948,50 @@ def main():
         else:
             prompt_file = config_manager.get_config_value("default_user_prompt")
         
-        # Determine which models to use
-        if args.all_models:
-            # Run on all installed models (excluding embedding models)
+        # Determine which models to use based on provider
+        # For non-Ollama providers, --all-models doesn't make sense since they may have thousands
+        if provider != "ollama" and args.all_models:
+            client.console.print("[bold yellow]Warning:[/bold yellow] --all-models is only supported for Ollama provider")
+            client.console.print("[bold yellow]Using default models for provider instead[/bold yellow]")
+            args.all_models = False
+        
+        if args.all_models and provider == "ollama":
+            # Run on all installed Ollama models (excluding embedding models)
             models_to_run = client.get_installed_models()
         elif args.models:
-            # Run on specified list of models, but filter out embedding models
-            models_to_run = [model for model in args.models if "embed" not in model.lower()]
-            if len(models_to_run) < len(args.models):
-                client.console.print("[bold yellow]Warning:[/bold yellow] Skipped embedding models which cannot generate text")
-        elif args.model:
-            # Run on a single model, but check if it's an embedding model
-            if "embed" not in args.model.lower():
-                models_to_run = [args.model]
+            # Run on specified list of models
+            if provider == "ollama":
+                # Filter out embedding models for Ollama
+                models_to_run = [model for model in args.models if "embed" not in model.lower()]
+                if len(models_to_run) < len(args.models):
+                    client.console.print("[bold yellow]Warning:[/bold yellow] Skipped embedding models which cannot generate text")
             else:
+                # For other providers, use models as specified
+                models_to_run = args.models
+        elif args.model:
+            # Run on a single model
+            if provider == "ollama" and "embed" in args.model.lower():
                 client.console.print("[bold red]Error:[/bold red] Cannot run text generation on embedding model")
                 return
+            else:
+                models_to_run = [args.model]
         else:
             # Check config for default model or models
             default_model = config_manager.get_config_value("default_model")
             default_models = config_manager.get_config_value("default_models", [])
             
-            if default_model and "embed" not in default_model.lower():
-                models_to_run = [default_model]
+            if default_model:
+                if provider == "ollama" and "embed" not in default_model.lower():
+                    models_to_run = [default_model]
+                elif provider != "ollama":
+                    models_to_run = [default_model]
+                else:
+                    models_to_run = client.get_installed_models()
             elif default_models:
-                models_to_run = [model for model in default_models if "embed" not in model.lower()]
+                if provider == "ollama":
+                    models_to_run = [model for model in default_models if "embed" not in model.lower()]
+                else:
+                    models_to_run = default_models
             else:
                 models_to_run = client.get_installed_models()
             
@@ -679,6 +1071,7 @@ def main():
     system_str = os.path.basename(system_file) if system_file else "None"
     
     console.print("\n[bold]Running with:[/bold]")
+    console.print(f"  • Provider: [cyan]{provider.capitalize()}[/cyan]")
     console.print(f"  • Model(s): [green]{model_str}[/green]")
     console.print(f"  • User prompt: [green]{prompt_str}[/green]")
     console.print(f"  • System prompt: [green]{system_str}[/green]")
@@ -705,6 +1098,7 @@ def main():
         # Create a config dictionary from the actual values used in this run
         # This way, even menu-selected options are saved correctly
         run_config = {
+            "default_provider": provider,
             "default_model": models_to_run[0] if len(models_to_run) == 1 else None,
             "default_models": models_to_run if len(models_to_run) > 1 else [],
             "default_system_prompt": system_file,
@@ -715,6 +1109,13 @@ def main():
             "default_timeout": timeout,
             "use_menu": not args.no_menu if hasattr(args, 'no_menu') else True
         }
+        
+        # Add base URL if specified
+        if args.base_url:
+            if provider == "ollama":
+                run_config["base_url"] = args.base_url
+            elif provider == "openai":
+                run_config["openai_base_url"] = args.base_url
         
         # Load existing config and update with current run values
         config = config_manager.load_config()

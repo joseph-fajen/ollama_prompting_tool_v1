@@ -1,4 +1,4 @@
-# Ollama Prompt CLI - QuickStart
+# LLM Prompt CLI - QuickStart
 
 ## Basic Usage - One-Shot Mode
 
@@ -15,8 +15,15 @@ python ollama_prompt.py --model llama3:8b
 # Multiple models
 python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini
 
-# All models
+# All models (Ollama provider only)
 python ollama_prompt.py --all-models
+
+# Using different providers
+python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
+python ollama_prompt.py --provider openai --model gpt-3.5-turbo
+
+# Set up API keys securely (for non-Ollama providers)
+python ollama_prompt.py --setup-keys
 ```
 
 ## Chat Mode
@@ -78,11 +85,17 @@ python ollama_prompt.py --show-config
 # Save current run settings as default
 python ollama_prompt.py --model llama3:8b --stream --save-config
 
+# Save provider settings as default
+python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1 --save-config
+
 # Reset configuration to defaults
 python ollama_prompt.py --reset-config
 
 # Set custom Ollama API URL
 python ollama_prompt.py --base-url http://192.168.1.100:11434
+
+# Set custom OpenAI-compatible API URL
+python ollama_prompt.py --provider openai --base-url http://localhost:8080 --api-key none
 ```
 
 See all options: `python ollama_prompt.py --help`

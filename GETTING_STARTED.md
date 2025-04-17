@@ -1,18 +1,25 @@
-# Getting Started with Ollama Prompt CLI
+# Getting Started with LLM Prompt CLI
 
 ## Installation
 
 1. Ensure you have [Python 3.7+](https://www.python.org/downloads/) installed
-2. Install [Ollama](https://ollama.ai/download) for your platform
-3. Install required Python packages:
+2. Install required Python packages:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Installing Ollama Models
+3. For Ollama provider (default):
+   - Install [Ollama](https://ollama.ai/download) for your platform
+   - Install at least one model (see below)
+   - Start the Ollama service
 
-Before running the script, you'll need at least one Ollama model installed:
+4. For other providers (OpenAI, HuggingFace):
+   - Set up API keys (see below)
+
+## Installing Ollama Models (for Ollama provider)
+
+Before using the Ollama provider, you'll need at least one model installed:
 
 ```bash
 # Examples of models to install
@@ -27,13 +34,26 @@ ollama list
 
 ## Running the Ollama Service
 
-Ensure the Ollama service is running before using this script:
+When using the Ollama provider, ensure the service is running:
 
 ```bash
 ollama serve
 ```
 
 This starts the Ollama API server on http://localhost:11434.
+
+## Setting Up API Keys (for non-Ollama providers)
+
+For OpenAI or HuggingFace providers, you'll need to set up API keys:
+
+```bash
+# Interactive API key setup (recommended)
+python ollama_prompt.py --setup-keys
+```
+
+Alternatively, you can:
+- Use environment variables: `OLLAMA_TOOL_OPENAI_API_KEY` or `OLLAMA_TOOL_HUGGINGFACE_API_KEY`
+- Provide keys directly: `python ollama_prompt.py --provider openai --api-key your_key_here`
 
 ## Basic Usage
 
@@ -44,10 +64,11 @@ python ollama_prompt.py
 ```
 
 This will guide you through selecting:
-1. A model (or all models)
-2. A user prompt file (or use the default)
-3. An optional system prompt file
-4. Output display preferences
+1. A provider (Ollama, OpenAI, or HuggingFace)
+2. A model (or all models for Ollama)
+3. A user prompt file (or use the default)
+4. An optional system prompt file
+5. Output display preferences
 
 ## Using Prompt Files
 
@@ -82,11 +103,13 @@ python ollama_prompt.py --reset-config
 ```
 
 Configuration values are stored in `config/ollama_config.yaml` and include:
+- Default provider (Ollama, OpenAI, HuggingFace)
 - Default model(s) to use
 - Default system and user prompts
 - Output preferences (streaming, saving)
 - Performance settings (timeout, max workers)
-- Custom Ollama API URL
+- Custom API URLs for different providers
+- API key handling preferences
 
 ## Chat Mode
 
