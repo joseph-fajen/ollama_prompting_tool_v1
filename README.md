@@ -100,12 +100,21 @@ See [ChatMode.md](ChatMode.md) for complete documentation.
 Support for multiple LLM providers through an adapter pattern:
 
 ```bash
-# OpenAI-compatible API
-python ollama_chat.py --provider openai --api-key your_key
+# Set up API keys securely (recommended)
+python ollama_chat.py --setup-keys
 
-# Hugging Face models
-python ollama_chat.py --provider huggingface --api-key your_key
+# OpenAI-compatible API with stored key
+python ollama_chat.py --provider openai
+
+# Hugging Face models with stored key
+python ollama_chat.py --provider huggingface
 ```
+
+**Secure API Key Management:**
+- System keyring integration (macOS Keychain, Windows Credential Manager, etc.)
+- Environment variables: `OLLAMA_TOOL_OPENAI_API_KEY`, `OLLAMA_TOOL_HUGGINGFACE_API_KEY`
+- Encrypted local configuration in `~/.ollama_tool/`
+- Interactive setup wizard
 
 All providers implement a common interface, making it easy to switch between them with minimal code changes.
 

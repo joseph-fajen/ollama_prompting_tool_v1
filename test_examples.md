@@ -94,6 +94,34 @@ python ollama_prompt.py --all-models --system-file system_prompts/expert_financi
 
 **What it demonstrates:** How to easily benchmark all available models with the same prompt combination.
 
+## Example 8: Using Multiple API Providers with Chat Mode
+
+This example demonstrates how to use different API providers with secure API key management.
+
+```bash
+# First, set up your API keys securely (one-time setup)
+python ollama_chat.py --setup-keys
+
+# Chat using OpenAI API
+python ollama_chat.py --provider openai --model gpt-3.5-turbo
+
+# Chat using Hugging Face model
+python ollama_chat.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
+```
+
+**Alternative API key methods:**
+
+```bash
+# Using environment variables (more secure than command line)
+export OLLAMA_TOOL_OPENAI_API_KEY=your_key_here
+python ollama_chat.py --provider openai
+
+# Direct command line (least secure, not recommended for shared systems)
+python ollama_chat.py --provider openai --api-key your_key_here
+```
+
+**What it demonstrates:** How to securely use multiple API providers while keeping your API keys safe.
+
 ## Creating Your Own Test Cases
 
 To create your own test cases:

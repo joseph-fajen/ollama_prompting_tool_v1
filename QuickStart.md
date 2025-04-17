@@ -31,8 +31,11 @@ python ollama_chat.py --model llama3:8b
 # Chat with streaming (recommended)
 python ollama_chat.py --stream
 
-# Use alternate provider
-python ollama_chat.py --provider openai --api-key your_key
+# Set up API keys securely (recommended)
+python ollama_chat.py --setup-keys
+
+# Use alternate provider with stored key
+python ollama_chat.py --provider openai
 ```
 
 See [ChatMode.md](ChatMode.md) for more chat features.

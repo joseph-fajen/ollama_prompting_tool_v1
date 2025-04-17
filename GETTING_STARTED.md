@@ -110,15 +110,30 @@ During a chat session, you can use commands like `/help`, `/new`, `/load`, `/sho
 
 ## Multiple API Providers
 
-The chat tool supports different LLM providers:
+The chat tool supports different LLM providers with secure API key management:
 
 ```bash
-# Use OpenAI-compatible API
-python ollama_chat.py --provider openai --api-key your_api_key
+# Set up your API keys securely (recommended first step)
+python ollama_chat.py --setup-keys
 
-# Use Hugging Face models
-python ollama_chat.py --provider huggingface --api-key your_api_key
+# Use OpenAI API with stored key
+python ollama_chat.py --provider openai
+
+# Use Hugging Face models with stored key
+python ollama_chat.py --provider huggingface
 ```
+
+### API Key Security
+
+Your API keys are stored securely using one of these methods:
+
+1. **System keyring** - Uses your OS's secure credential store (most secure)
+2. **Local config** - Encrypted file in your home directory
+3. **Environment variables** - For temporary usage:
+   ```bash
+   export OLLAMA_TOOL_OPENAI_API_KEY=your_key_here
+   export OLLAMA_TOOL_HUGGINGFACE_API_KEY=your_key_here
+   ```
 
 ## Next Steps
 
