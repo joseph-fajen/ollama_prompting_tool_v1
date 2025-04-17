@@ -88,8 +88,41 @@ Configuration values are stored in `config/ollama_config.yaml` and include:
 - Performance settings (timeout, max workers)
 - Custom Ollama API URL
 
+## Chat Mode
+
+The new `ollama_chat.py` script provides an interactive chat experience with conversation history:
+
+```bash
+# Start a chat session with the default model
+python ollama_chat.py
+
+# Chat with a specific model and stream tokens in real-time
+python ollama_chat.py --model llama3:8b --stream
+
+# Load a previous conversation
+python ollama_chat.py --load-conversation <conversation_id>
+
+# List all saved conversations
+python ollama_chat.py --list-conversations
+```
+
+During a chat session, you can use commands like `/help`, `/new`, `/load`, `/show`, and `/model`.
+
+## Multiple API Providers
+
+The chat tool supports different LLM providers:
+
+```bash
+# Use OpenAI-compatible API
+python ollama_chat.py --provider openai --api-key your_api_key
+
+# Use Hugging Face models
+python ollama_chat.py --provider huggingface --api-key your_api_key
+```
+
 ## Next Steps
 
 - Check [QuickStart.md](QuickStart.md) for common commands
+- See [ChatMode.md](ChatMode.md) for detailed chat features and API compatibility
 - Explore [README.md](README.md) for advanced usage and examples
 - See [test_examples.md](test_examples.md) for practical examples

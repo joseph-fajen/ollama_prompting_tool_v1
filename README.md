@@ -75,6 +75,40 @@ python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini --max-worker
 
 For more examples, see [test_examples.md](test_examples.md).
 
+## Chat Mode
+
+The new chat mode provides an interactive conversation experience:
+
+```bash
+# Start a chat session
+python ollama_chat.py
+
+# With streaming (recommended for chat)
+python ollama_chat.py --stream
+```
+
+Features include:
+- Conversation history tracking
+- Save/load conversations
+- Interactive commands during chat (use `/help` to see options)
+- System prompts that persist across the conversation
+
+See [ChatMode.md](ChatMode.md) for complete documentation.
+
+## API Compatibility
+
+Support for multiple LLM providers through an adapter pattern:
+
+```bash
+# OpenAI-compatible API
+python ollama_chat.py --provider openai --api-key your_key
+
+# Hugging Face models
+python ollama_chat.py --provider huggingface --api-key your_key
+```
+
+All providers implement a common interface, making it easy to switch between them with minimal code changes.
+
 ## Configuration System
 
 The script now includes a configuration system that persists your preferred settings:
@@ -90,6 +124,7 @@ You can configure default values for:
 - Output preferences (streaming, saving responses)
 - Performance options (max workers, timeout)
 - Custom Ollama API URL
+- API provider settings (provider type, API keys)
 
 ## Default Behavior
 
