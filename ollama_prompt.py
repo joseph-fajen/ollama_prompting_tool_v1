@@ -1,3 +1,7 @@
+"""
+Ollama Prompt Tool - A CLI tool for running prompts on models from different providers.
+"""
+
 import requests
 import json
 import time
@@ -85,8 +89,38 @@ class AdapterWrapper:
             
             return response_text, None
             
+        except requests.exceptions.HTTPError as http_err:
+            # HTTP errors should already be handled by the adapters with specific messages
+            self.console.print(f"[bold red]Error:[/bold red] {str(http_err)}")
+            
+            if self.provider_name == "huggingface":
+                self.console.print("\n[bold yellow]Suggestions for Hugging Face:[/bold yellow]")
+                self.console.print("1. If using a basic model like gpt2:")
+                self.console.print("  • Try without a system prompt (select 'None' for system prompt)")
+                self.console.print("  • Use a simpler, shorter user prompt")
+                self.console.print("\n2. Try one of these alternative models:")
+                self.console.print("  • google/flan-t5-small (instruction-following model)")
+                self.console.print("  • facebook/opt-125m (smaller version that's often accessible)")
+                self.console.print("  • distilgpt2 (smaller, usually accessible)")
+                self.console.print("\n3. Or try with Ollama models which work without API keys")
+            
+            return None, None
+            
         except Exception as e:
             self.console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            
+            # Provider-specific error suggestions
+            if self.provider_name == "openai":
+                self.console.print("[bold yellow]OpenAI troubleshooting:[/bold yellow]")
+                self.console.print("1. Check that your API key is correct")
+                self.console.print("2. Verify you have billing set up at https://platform.openai.com/account/billing")
+                self.console.print("3. Make sure the model name is valid")
+            elif self.provider_name == "huggingface":
+                self.console.print("[bold yellow]Hugging Face troubleshooting:[/bold yellow]")
+                self.console.print("1. Check your API key at https://huggingface.co/settings/tokens")
+                self.console.print("2. Try a more accessible model like 'google/flan-t5-small' or 'distilgpt2'")
+                self.console.print("3. Some models require Pro subscription or special access")
+            
             return None, None
     
     def _save_response(self, model, prompt, response, elapsed_time):
@@ -247,22 +281,35 @@ class OllamaClient:
     def get_installed_models(self):
         """Get a list of all installed Ollama models, excluding embedding models"""
         try:
+            # Debug: Print before running command
+            print("[Debug] Running 'ollama list' to get models...")
+            
             result = subprocess.run(['ollama', 'list'], capture_output=True, text=True)
             lines = result.stdout.strip().split('\n')
+            
+            # Debug: Print raw output
+            print(f"[Debug] Raw output: {result.stdout}")
             
             # Skip the header line
             if len(lines) > 1:
                 models = []
                 for line in lines[1:]:  # Skip header row
                     parts = line.split()
+                    print(f"[Debug] Processing line: {line}, parts: {parts}")
                     if len(parts) >= 1:
                         model_name = parts[0]
                         # Skip embedding models which cannot generate text
                         if "embed" not in model_name.lower():
                             models.append(model_name)  # Get just the model name
+                            print(f"[Debug] Added model: {model_name}")
+                
+                print(f"[Debug] Final models list: {models}")
                 return models
+            
+            print("[Debug] No models found in output")
             return []
         except Exception as e:
+            print(f"[Debug] Exception: {str(e)}")
             self.console.print(f"[bold red]Error getting models:[/bold red] {str(e)}")
             return []
     
@@ -527,10 +574,13 @@ def display_interactive_cli_menu(client, provider="ollama"):
     console.print("\n[bold blue]==============================\n[/bold blue]")
     
     # Get available models
+    console.print("\n[bold blue]DEBUG: Getting available models...[/bold blue]")
     available_models = client.get_installed_models()
+    console.print(f"[bold blue]DEBUG: Available models: {available_models}[/bold blue]")
     if not available_models:
         console.print("[bold red]No Ollama models found![/bold red]")
         console.print("Please install models with 'ollama pull <model>' and try again.")
+        console.print("[bold red]DEBUG: Returning None from menu[/bold red]")
         return None
     
     # Get available prompts
@@ -559,8 +609,23 @@ def display_interactive_cli_menu(client, provider="ollama"):
                 key_manager = api_key_manager.ApiKeyManager()
                 api_key = key_manager.get_api_key(selected_provider)
                 if not api_key:
-                    console.print(f"[bold yellow]Warning: No API key found for {selected_provider.capitalize()}[/bold yellow]")
-                    console.print(f"[bold yellow]You will be prompted for an API key later[/bold yellow]")
+                    console.print(f"[bold yellow]No API key found for {selected_provider.capitalize()}[/bold yellow]")
+                    console.print(f"[bold yellow]You need to set up an API key to use {selected_provider.capitalize()}[/bold yellow]")
+                    
+                    # Prompt for API key right now
+                    api_key = key_manager.prompt_for_api_key(selected_provider)
+                    
+                    # If user didn't provide a key, fall back to Ollama
+                    if not api_key:
+                        console.print(f"[bold red]No API key provided. Falling back to Ollama.[/bold red]")
+                        selected_provider = "ollama"
+                else:
+                    console.print(f"[green]Found API key for {selected_provider.capitalize()}[/green]")
+                    
+                # For OpenAI, display the base URL being used
+                if selected_provider == "openai":
+                    base_url = config_manager.get_config_value("openai_base_url", "https://api.openai.com")
+                    console.print(f"[blue]Using OpenAI base URL: {base_url}[/blue]")
         else:
             console.print(f"[bold yellow]Invalid choice. Using default provider: {selected_provider.capitalize()}[/bold yellow]")
     except ValueError:
@@ -580,9 +645,16 @@ def display_interactive_cli_menu(client, provider="ollama"):
             # Only proceed if we have an API key
             if api_key:
                 try:
+                    # Get base URL for OpenAI if needed
+                    base_url = None
+                    if selected_provider == "openai":
+                        base_url = config_manager.get_config_value("openai_base_url", "https://api.openai.com")
+                        console.print(f"[bold blue]DEBUG: Using OpenAI base URL: {base_url}[/bold blue]")
+                        
                     adapter = api_adapters.LLMAdapterFactory.create_adapter(
                         selected_provider, 
-                        api_key=api_key
+                        api_key=api_key,
+                        base_url=base_url
                     )
                     client = AdapterWrapper(adapter, selected_provider)
                 except ValueError as e:
@@ -608,36 +680,109 @@ def display_interactive_cli_menu(client, provider="ollama"):
     
     # 1. Select model
     console.print("\n[bold]1. Select a model:[/bold]")
-    for i, model in enumerate(available_models):
+    
+    # For OpenAI, only show the most common models to avoid overwhelming the user
+    if selected_provider == "openai":
+        # List of common OpenAI models to display
+        common_models = [
+            "gpt-4o",
+            "gpt-4-turbo",
+            "gpt-3.5-turbo",
+            "gpt-4",
+            "gpt-4o-mini",
+            "gpt-4-1106-preview",
+            "gpt-3.5-turbo-16k",
+            "gpt-3.5-turbo-instruct"
+        ]
+        
+        # Filter available models to only show those that match the common models
+        filtered_models = []
+        for common_model in common_models:
+            matches = [model for model in available_models if model.startswith(common_model)]
+            if matches:
+                # Add the shortest match (usually the base model name)
+                filtered_models.append(min(matches, key=len))
+        
+        # If we couldn't match any common models, just use the first 8 from available models
+        if not filtered_models and available_models:
+            filtered_models = available_models[:8]
+            
+        # Add an option to show all models
+        display_models = filtered_models
+        show_all_option = True
+    else:
+        # For other providers, show all available models
+        display_models = available_models
+        show_all_option = False
+    
+    # Display the models
+    for i, model in enumerate(display_models):
         console.print(f"  {i+1}. {model}")
+    
+    # Add special options based on provider
+    special_options = []
     
     # Only show "Run all models" for Ollama (other providers might have too many models)
     if selected_provider == "ollama":
-        console.print(f"  {len(available_models)+1}. Run on all models")
+        special_options.append(("Run on all models", available_models))
+    
+    # Add "Show all models" option for OpenAI if filtered
+    if show_all_option and len(available_models) > len(display_models):
+        special_options.append(("Show all models", None))
+    
+    # Display special options
+    for i, (option_text, _) in enumerate(special_options):
+        console.print(f"  {len(display_models)+i+1}. {option_text}")
     
     model_choice = input("\nEnter your model choice (number): ")
     try:
         model_idx = int(model_choice) - 1
-        if selected_provider == "ollama" and model_idx == len(available_models):
-            selected_models = available_models
-            console.print(f"[green]Running on all models[/green]")
-        elif 0 <= model_idx < len(available_models):
-            selected_models = [available_models[model_idx]]
-            console.print(f"[green]Selected model: {available_models[model_idx]}[/green]")
+        
+        # Handle special options (Run all models, Show all models)
+        if model_idx >= len(display_models) and model_idx < len(display_models) + len(special_options):
+            special_option_idx = model_idx - len(display_models)
+            option_text, option_value = special_options[special_option_idx]
+            
+            if option_text == "Run on all models":
+                selected_models = available_models
+                console.print(f"[green]Running on all models[/green]")
+            elif option_text == "Show all models":
+                # Show the full list of models and ask again
+                console.print("\n[bold]All available models:[/bold]")
+                for i, model in enumerate(available_models):
+                    console.print(f"  {i+1}. {model}")
+                
+                # Ask again with the full list
+                second_choice = input("\nEnter your model choice from the full list (number): ")
+                try:
+                    second_idx = int(second_choice) - 1
+                    if 0 <= second_idx < len(available_models):
+                        selected_models = [available_models[second_idx]]
+                        console.print(f"[green]Selected model: {available_models[second_idx]}[/green]")
+                    else:
+                        console.print(f"[bold red]Invalid choice. Using default (first model).[/bold red]")
+                        selected_models = [available_models[0]]
+                except ValueError:
+                    console.print(f"[bold red]Invalid input. Using default (first model).[/bold red]")
+                    selected_models = [available_models[0]]
+        # Regular model selection
+        elif 0 <= model_idx < len(display_models):
+            selected_models = [display_models[model_idx]]
+            console.print(f"[green]Selected model: {display_models[model_idx]}[/green]")
         else:
             if selected_provider == "ollama":
                 console.print("[bold red]Invalid choice. Using default (all models).[/bold red]")
                 selected_models = available_models
             else:
                 console.print(f"[bold red]Invalid choice. Using default (first model).[/bold red]")
-                selected_models = [available_models[0]]
+                selected_models = [display_models[0] if display_models else available_models[0]]
     except ValueError:
         if selected_provider == "ollama":
             console.print("[bold red]Invalid input. Using default (all models).[/bold red]")
             selected_models = available_models
         else:
             console.print(f"[bold red]Invalid input. Using default (first model).[/bold red]")
-            selected_models = [available_models[0]]
+            selected_models = [display_models[0] if display_models else available_models[0]]
     
     # 2. Select user prompt
     console.print("\n[bold]2. Select a user prompt:[/bold]")
@@ -692,7 +837,7 @@ def display_interactive_cli_menu(client, provider="ollama"):
         if 0 <= system_idx < len(system_prompt_options):
             selected_system = system_prompt_options[system_idx][1]
             system_name = system_prompt_options[system_idx][0]
-            # Store system filename (for output naming) if a file was selected
+            # Store system filename (basename without extension) for output naming
             if selected_system:
                 client._system_filename = os.path.splitext(system_name)[0]
             else:
@@ -727,6 +872,14 @@ def display_interactive_cli_menu(client, provider="ollama"):
         console.print("[green]These settings will be saved as defaults.[/green]")
     
     console.print(f"\n[bold blue]Starting {selected_provider.capitalize()} generation...[/bold blue]\n")
+    
+    console.print("\n[bold blue]DEBUG: Menu complete, returning selections:[/bold blue]")
+    console.print(f"  • Provider: {selected_provider}")
+    console.print(f"  • Models: {selected_models}")
+    console.print(f"  • User prompt: {selected_prompt}")
+    console.print(f"  • System prompt: {selected_system}")
+    console.print(f"  • Stream: {stream}")
+    console.print(f"  • Save config: {save_config}")
     
     return selected_provider, selected_models, selected_prompt, selected_system, stream, save_config
 
@@ -784,6 +937,8 @@ def main():
                         help="Reset configuration to defaults")
     config_group.add_argument("--base-url", type=str,
                         help="Set API base URL (for Ollama default: http://localhost:11434)")
+    config_group.add_argument("--force-menu", action="store_true",
+                        help="Force the interactive menu to be displayed")
     
     # Set defaults from configuration
     config = config_manager.load_config()
@@ -889,20 +1044,56 @@ def main():
     # Check if any relevant command line arguments were provided
     # Only check for arguments that would affect model selection or prompt content
     relevant_arg_names = ['model', 'all_models', 'prompt_file', 'system_file', 'models', 'provider']
-    has_relevant_args = any(vars(args)[arg_name] for arg_name in relevant_arg_names)
+    args_dict = vars(args)
+    
+    # Debug print
+    console = Console()
+    console.print("\n[bold blue]DEBUG: Command line arguments:[/bold blue]")
+    for arg_name in relevant_arg_names:
+        value = args_dict.get(arg_name)
+        console.print(f"  • {arg_name}: {value}")
+    console.print(f"  • no_menu: {args_dict.get('no_menu')}")
+    
+    # More detailed check to help debug
+    console.print("\n[bold blue]DEBUG: More details on arguments:[/bold blue]")
+    args_values = []
+    for arg_name in relevant_arg_names:
+        value = args_dict.get(arg_name)
+        # Print the value and its type
+        console.print(f"  • {arg_name}: {value} (type: {type(value)})")
+        args_values.append(value)
+    
+    # Python treats empty lists, None, False, and 0 as falsy
+    has_relevant_args = any(arg for arg in args_values if arg)
+    console.print(f"[bold blue]DEBUG: has_relevant_args: {has_relevant_args}[/bold blue]")
     
     # Check if we should use menu based on config and args
     config_use_menu = config_manager.get_config_value("use_menu", True)
     use_menu = config_use_menu and not has_relevant_args and not args.no_menu
+    console.print(f"[bold blue]DEBUG: config_use_menu: {config_use_menu}, use_menu: {use_menu}[/bold blue]")
     
-    if use_menu:
+    # Force display of menu in these cases:
+    # 1. Explicit force-menu flag
+    # 2. No command line arguments (just the script name)
+    # 3. Config says to use menu and no relevant args provided
+    force_menu = args.force_menu or len(sys.argv) == 1
+    
+    if force_menu or use_menu:
         # Use interactive CLI menu
+        console.print("\n[bold green]Displaying interactive menu...[/bold green]")
         menu_results = display_interactive_cli_menu(client, provider)
         if menu_results is None:
+            console.print("[bold red]Menu returned None - no models found or user cancelled[/bold red]")
             return
         
         try:
+            console.print("\n[bold blue]DEBUG: Got menu results, unpacking...[/bold blue]")
             menu_provider, models_to_run, prompt_file, system_file, stream, save_config_from_menu = menu_results
+            console.print(f"[bold blue]DEBUG: Menu selections:[/bold blue]")
+            console.print(f"  • Provider: {menu_provider}")
+            console.print(f"  • Models: {models_to_run}")
+            console.print(f"  • Prompt file: {prompt_file}")
+            console.print(f"  • System file: {system_file}")
             
             # If provider changed in the menu, recreate the client
             if menu_provider != provider:
@@ -914,11 +1105,18 @@ def main():
                     key_manager = api_key_manager.ApiKeyManager()
                     api_key = key_manager.get_api_key(provider)
                     
-                    # Create adapter
+                    # Create adapter with the appropriate base URL
+                    base_url = args.base_url
+                    if provider == "openai":
+                        base_url = config_manager.get_config_value("openai_base_url", "https://api.openai.com")
+                        if args.base_url:  # Use command line arg if provided
+                            base_url = args.base_url
+                        console.print(f"[bold blue]DEBUG: Using OpenAI base URL: {base_url}[/bold blue]")
+                            
                     adapter = api_adapters.LLMAdapterFactory.create_adapter(
                         provider, 
                         api_key=api_key,
-                        base_url=args.base_url
+                        base_url=base_url
                     )
                     client = AdapterWrapper(adapter, provider)
         except Exception as e:
@@ -1012,7 +1210,7 @@ def main():
     
     # Get system prompt content if specified
     system_prompt = None
-    if system_file:
+    if system_file and os.path.exists(system_file):
         system_prompt = get_prompt_content(system_file)
         if system_prompt is None:
             return
@@ -1022,31 +1220,67 @@ def main():
         client._system_filename = "no_system"
     
     # Get user prompt content from file or ask for direct input
-    if prompt_file:
+    if prompt_file and os.path.exists(prompt_file):
         main_prompt = get_prompt_content(prompt_file)
         if main_prompt is None:
             return
         # Store user prompt filename (basename without extension) for output naming
         client._user_filename = os.path.splitext(os.path.basename(prompt_file))[0]
     else:
-        # Ask user for direct input
-        console = Console()
-        console.print("\n[bold]No prompt file selected. Please enter your prompt directly:[/bold]")
-        console.print("[dim]Type your prompt below. When finished, press Enter twice (leave a blank line).[/dim]")
-        
-        lines = []
-        while True:
-            line = input()
-            if not line and lines and not lines[-1]:  # Two consecutive empty lines
-                break
-            lines.append(line)
-        
-        main_prompt = "\n".join(lines).strip()
-        if not main_prompt:
-            console.print("[bold red]No prompt provided. Exiting.[/bold red]")
-            return
+        # Since we don't have a valid prompt file, and we're supposed to use menu,
+        # Let's force display menu instead of proceeding to direct input
+        if config_use_menu and not args.no_menu and not has_relevant_args:
+            # Force display of interactive menu
+            menu_results = display_interactive_cli_menu(client, provider)
+            if menu_results is None:
+                return
             
-        client._user_filename = "direct_input"
+            provider, models_to_run, prompt_file, system_file, stream, save_config = menu_results
+            
+            # Now try again with the prompt file from the menu
+            if prompt_file and os.path.exists(prompt_file):
+                main_prompt = get_prompt_content(prompt_file)
+                if main_prompt is None:
+                    return
+                client._user_filename = os.path.splitext(os.path.basename(prompt_file))[0]
+            else:
+                # Still no prompt file, go to direct input
+                console = Console()
+                console.print("\n[bold]No prompt file selected. Please enter your prompt directly:[/bold]")
+                console.print("[dim]Type your prompt below. When finished, press Enter twice (leave a blank line).[/dim]")
+                
+                lines = []
+                while True:
+                    line = input()
+                    if not line and lines and not lines[-1]:  # Two consecutive empty lines
+                        break
+                    lines.append(line)
+                
+                main_prompt = "\n".join(lines).strip()
+                if not main_prompt:
+                    console.print("[bold red]No prompt provided. Exiting.[/bold red]")
+                    return
+                
+                client._user_filename = "direct_input"
+        else:
+            # Ask user for direct input
+            console = Console()
+            console.print("\n[bold]No prompt file selected. Please enter your prompt directly:[/bold]")
+            console.print("[dim]Type your prompt below. When finished, press Enter twice (leave a blank line).[/dim]")
+            
+            lines = []
+            while True:
+                line = input()
+                if not line and lines and not lines[-1]:  # Two consecutive empty lines
+                    break
+                lines.append(line)
+            
+            main_prompt = "\n".join(lines).strip()
+            if not main_prompt:
+                console.print("[bold red]No prompt provided. Exiting.[/bold red]")
+                return
+                
+            client._user_filename = "direct_input"
     
     # Store the system prompt in the client object for access in save_response
     client._system_prompt = system_prompt

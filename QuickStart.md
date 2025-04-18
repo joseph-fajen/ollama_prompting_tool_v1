@@ -19,11 +19,39 @@ python ollama_prompt.py --models llama3:8b mixtral:latest phi3:mini
 python ollama_prompt.py --all-models
 
 # Using different providers
-python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
-python ollama_prompt.py --provider openai --model gpt-3.5-turbo
+python ollama_prompt.py --provider openai --model gpt-4o
+
+# Force display of interactive menu
+python ollama_prompt.py --force-menu
 
 # Set up API keys securely (for non-Ollama providers)
 python ollama_prompt.py --setup-keys
+```
+
+## Provider and Model Recommendations
+
+### Ollama (Recommended for Most Users)
+- No API key required
+- Local execution
+- Good starter models: `llama3:8b`, `phi3:mini`, `codellama:7b-instruct`
+
+### OpenAI
+- Requires API key with billing set up
+- Recommended models: `gpt-4o`, `gpt-3.5-turbo`, `gpt-4-turbo`
+```bash
+python ollama_prompt.py --provider openai --model gpt-4o
+```
+
+### Hugging Face
+- Requires API key, many models have access restrictions
+- Best for specialized use cases or research
+- Most reliable models:
+  - `google/flan-t5-small`
+  - `distilgpt2`
+  - `facebook/opt-125m` 
+- Use without system prompt for best results with basic models
+```bash
+python ollama_prompt.py --provider huggingface --model google/flan-t5-small
 ```
 
 ## Chat Mode
@@ -86,7 +114,7 @@ python ollama_prompt.py --show-config
 python ollama_prompt.py --model llama3:8b --stream --save-config
 
 # Save provider settings as default
-python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1 --save-config
+python ollama_prompt.py --provider openai --model gpt-4o --save-config
 
 # Reset configuration to defaults
 python ollama_prompt.py --reset-config

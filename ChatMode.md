@@ -89,8 +89,17 @@ python ollama_chat.py --provider openai --base-url http://localhost:8080 --api-k
 
 ```bash
 # Use Hugging Face models with stored key
-python ollama_chat.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
+python ollama_chat.py --provider huggingface --model google/flan-t5-small
 ```
+
+**Notes on Hugging Face Models:**
+- Many models have access restrictions or require Pro subscription
+- Best for specialized use cases or research
+- Most reliable models for general use:
+  - `google/flan-t5-small` (instruction-tuned)
+  - `distilgpt2` (smaller but accessible)
+  - `facebook/opt-125m` (smaller OPT model)
+- For basic models, avoid using system prompts for best results
 
 ## One-Shot Mode (Backward Compatibility)
 
@@ -170,14 +179,18 @@ For the chat mode in `ollama_chat.py`, this information is stored in the convers
 - **Message Format**: Different providers may handle system prompts differently
 - **Chat History**: Some models have context length limitations affecting how much history can be retained
 
-## Available Blockchain-Related Prompts
+## Available Prompts
 
 ### System Prompts
 - `blockchain_educator.md` - Expert in explaining blockchain concepts clearly
 - `blockchain_tech_writer.md` - Technical writer specializing in blockchain documentation
 - `blockchain_ux_writer.md` - Focuses on user-friendly blockchain explanations
+- `scientific_explainer.md` - Technical expert for precise scientific explanations
+- `creative_content_developer.md` - Creates engaging, imaginative content for complex topics
 
 ### User Prompts
 - `smart_contract_explanation.md` - Requests explanation of smart contracts
 - `consensus_mechanism_comparison.md` - Asks for comparison of blockchain consensus mechanisms
 - `wallet_setup_guide.md` - Prompts for wallet setup instructions
+- `quantum_resistant_blockchain.md` - Technical analysis of post-quantum cryptography for blockchains
+- `blockchain_parallel_society.md` - Creative narrative about blockchain's future impact on society

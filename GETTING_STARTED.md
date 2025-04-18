@@ -143,7 +143,8 @@ python ollama_chat.py --setup-keys
 python ollama_chat.py --provider openai
 
 # Use Hugging Face models with stored key
-python ollama_chat.py --provider huggingface
+# (for best results, use simpler models like google/flan-t5-small)
+python ollama_chat.py --provider huggingface --model google/flan-t5-small
 ```
 
 ### API Key Security

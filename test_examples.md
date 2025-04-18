@@ -91,8 +91,11 @@ python ollama_prompt.py --setup-keys
 # One-shot mode with OpenAI API
 python ollama_prompt.py --provider openai --model gpt-3.5-turbo --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
 
-# One-shot mode with Hugging Face model
-python ollama_prompt.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1 --system-file system_prompts/blockchain_educator.md --prompt-file user_prompts/smart_contract_explanation.md
+# One-shot mode with Hugging Face model (more accessible options)
+python ollama_prompt.py --provider huggingface --model google/flan-t5-small --prompt-file user_prompts/smart_contract_explanation.md
+
+# Note: For basic Hugging Face models, it's often better to omit the system prompt
+# If using a system prompt with HF, simpler models work better with shorter prompts
 ```
 
 **Alternative API key methods:**
@@ -119,8 +122,8 @@ python ollama_chat.py --setup-keys
 # Chat using OpenAI API
 python ollama_chat.py --provider openai --model gpt-3.5-turbo
 
-# Chat using Hugging Face model
-python ollama_chat.py --provider huggingface --model mistralai/Mistral-7B-Instruct-v0.1
+# Chat using Hugging Face model (use simpler models for better compatibility)
+python ollama_chat.py --provider huggingface --model google/flan-t5-small
 ```
 
 **What it demonstrates:** How to use interactive chat mode with different API providers.

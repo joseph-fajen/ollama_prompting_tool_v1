@@ -149,16 +149,39 @@ class OpenAIAdapter(LLMAdapter):
             "max_tokens": kwargs.get("max_tokens", 1024)
         }
         
-        if stream:
-            return self._stream_response(url, payload)
-        else:
-            response = self.session.post(url, json=payload)
-            response.raise_for_status()
-            response_json = response.json()
-            
-            if "choices" in response_json and len(response_json["choices"]) > 0:
-                return response_json["choices"][0]["message"]["content"]
-            return ""
+        try:
+            if stream:
+                return self._stream_response(url, payload)
+            else:
+                response = self.session.post(url, json=payload)
+                response.raise_for_status()
+                response_json = response.json()
+                
+                if "choices" in response_json and len(response_json["choices"]) > 0:
+                    return response_json["choices"][0]["message"]["content"]
+                return ""
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"\n[ERROR] Model '{model}' not found or not accessible.")
+                print("\nRecommended models to try instead:")
+                print("  • gpt-4o (newest and fastest)")
+                print("  • gpt-4-turbo (good balance of capability and speed)")
+                print("  • gpt-3.5-turbo (fastest)")
+                print("\nNote: Models with 'moderation' in the name are for content filtering, not text generation.")
+            elif e.response.status_code == 401:
+                print("\n[ERROR] Authentication error. Your API key may be invalid or expired.")
+            elif e.response.status_code == 429:
+                print("\n[ERROR] Rate limit exceeded. You've sent too many requests to the API.")
+                print("Consider using a different model, waiting, or checking your usage limits.")
+            elif e.response.status_code == 400:
+                print("\n[ERROR] Bad request. The API couldn't process your request.")
+                print("This could be due to invalid parameters, model limitations, or content policy violations.")
+                
+            # Re-raise so our main error handler can deal with it
+            raise
+        except Exception as e:
+            print(f"\n[ERROR] Unexpected error when calling OpenAI API: {str(e)}")
+            raise
     
     def _stream_response(self, url: str, payload: Dict[str, Any]) -> Generator[str, None, None]:
         """Stream response tokens from OpenAI API"""
@@ -181,9 +204,55 @@ class OpenAIAdapter(LLMAdapter):
             response = self.session.get(url)
             response.raise_for_status()
             data = response.json()
-            return [model["id"] for model in data.get("data", [])]
-        except:
-            return []
+            
+            # List all models from the API
+            all_models = [model["id"] for model in data.get("data", [])]
+            
+            # If we successfully got models from the API, return them
+            if all_models:
+                # Order models to put common text generation models first
+                recommended_models = [
+                    "gpt-4o", 
+                    "gpt-4-turbo", 
+                    "gpt-3.5-turbo", 
+                    "gpt-4", 
+                    "gpt-4-1106-preview",
+                    "gpt-3.5-turbo-16k"
+                ]
+                # Put recommended models first, then add all other models
+                ordered_models = []
+                for model in recommended_models:
+                    if any(m.startswith(model) for m in all_models):
+                        matches = [m for m in all_models if m.startswith(model)]
+                        ordered_models.extend(matches)
+                
+                # Add remaining models
+                for model in all_models:
+                    if model not in ordered_models:
+                        ordered_models.append(model)
+                
+                return ordered_models
+            
+            # Fallback in case no models returned from API
+            return [
+                "gpt-4o",
+                "gpt-4-turbo",
+                "gpt-3.5-turbo",
+                "gpt-4",
+                "gpt-4-1106-preview",
+                "gpt-3.5-turbo-16k"
+            ]
+        except Exception as e:
+            print(f"[Debug] Error getting OpenAI models: {str(e)}")
+            # Return a default list of common models if API call fails
+            return [
+                "gpt-4o",
+                "gpt-4-turbo",
+                "gpt-3.5-turbo",
+                "gpt-4",
+                "gpt-4-1106-preview",
+                "gpt-3.5-turbo-16k"
+            ]
 
 class HuggingFaceAdapter(LLMAdapter):
     """Adapter for Hugging Face Inference API"""
@@ -202,6 +271,9 @@ class HuggingFaceAdapter(LLMAdapter):
         """Generate a response using Hugging Face API"""
         url = f"{self.base_url}/{model}"
         
+        # Store model name for use in _messages_to_prompt
+        self.model = model
+        
         # Convert messages to prompt that HF understands
         prompt = self._messages_to_prompt(messages)
         
@@ -215,16 +287,113 @@ class HuggingFaceAdapter(LLMAdapter):
         }
         
         # HF API doesn't support true streaming, so ignore stream parameter
-        response = self.session.post(url, json=payload)
-        response.raise_for_status()
-        response_json = response.json()
-        
-        if isinstance(response_json, list) and len(response_json) > 0:
-            return response_json[0].get("generated_text", "")
-        return ""
+        try:
+            response = self.session.post(url, json=payload)
+            response.raise_for_status()
+            response_json = response.json()
+            
+            if isinstance(response_json, list) and len(response_json) > 0:
+                return response_json[0].get("generated_text", "")
+            return ""
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                print("\n[ERROR] Forbidden access to this model. Possible reasons:")
+                print("1. Your API key might not have access to this specific model")
+                print("2. The model might be gated (requiring Pro subscription or special access)")
+                print("3. Your account might have usage limits")
+                print("\nSuggestions:")
+                print("- Try a different model")
+                print("- Check your API key permissions at https://huggingface.co/settings/tokens")
+                print("- For Mistral models, check available models at https://huggingface.co/mistralai")
+                print("- Consider using a non-gated model like 'facebook/opt-350m' or 'distilgpt2'")
+            elif e.response.status_code == 401:
+                print("\n[ERROR] Unauthorized. Your API key might be invalid or expired.")
+            elif e.response.status_code == 429:
+                print("\n[ERROR] Too many requests. You've hit the rate limit for this model.")
+            elif e.response.status_code == 422:
+                print("\n[ERROR] Unprocessable Entity. The model couldn't process your input.")
+                print("\nPossible reasons:")
+                print("1. The system+user prompt format might not be compatible with this model")
+                print("2. The input might be too long for the model's context window")
+                print("3. The model might need a different input format")
+                print("\nSuggestions:")
+                print("- Try a model specifically designed for instruction following like facebook/opt-350m")
+                print("- Try without a system prompt (select 'None' for system prompt)")
+                print("- Try a simpler, shorter user prompt")
+            
+            # Re-raise the exception so the calling code can handle it
+            raise
     
     def _messages_to_prompt(self, messages: List[Dict[str, str]]) -> str:
         """Convert a list of messages to a prompt string for HF models"""
+        model = self.model if hasattr(self, 'model') else None
+        model_lower = str(model).lower() if model else ""
+        
+        # For T5 and FLAN-T5 models (instruction-tuned)
+        if "t5" in model_lower:
+            # FLAN-T5 works well with simple instruction format
+            system = next((msg["content"] for msg in messages if msg["role"] == "system"), "")
+            user = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+            
+            if system:
+                return f"Instructions: {system}\n\nQuestion: {user}"
+            else:
+                return f"Question: {user}"
+        
+        # TinyLlama chat models
+        elif "tinyllama" in model_lower and "chat" in model_lower:
+            result = ""
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                
+                if role == "system":
+                    result += f"<|system|>\n{content}\n"
+                elif role == "user":
+                    result += f"<|user|>\n{content}\n"
+                elif role == "assistant":
+                    result += f"<|assistant|>\n{content}\n"
+            
+            # Add final assistant marker for generation
+            if result and not result.endswith("<|assistant|>\n"):
+                result += "<|assistant|>\n"
+            
+            return result
+            
+        # For Qwen chat models
+        elif "qwen" in model_lower and "chat" in model_lower:
+            result = ""
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                
+                if role == "system":
+                    result += f"<|im_start|>system\n{content}<|im_end|>\n"
+                elif role == "user":
+                    result += f"<|im_start|>user\n{content}<|im_end|>\n"
+                elif role == "assistant":
+                    result += f"<|im_start|>assistant\n{content}<|im_end|>\n"
+            
+            # Add final assistant marker for generation
+            if not result.endswith("<|im_start|>assistant\n<|im_end|>\n"):
+                result += "<|im_start|>assistant\n"
+            
+            return result
+            
+        # Check if we're dealing with a basic language model
+        basic_lm_models = ['gpt2', 'distilgpt2', 'opt-125m', 'opt-350m', 'pythia']
+        is_basic_lm = any(model_name in model_lower for model_name in basic_lm_models)
+        
+        # For basic LMs, just concatenate all messages simply
+        if is_basic_lm:
+            # Get user message
+            user_content = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
+            
+            # For basic models, it's better to just use the user prompt without system prompt
+            # as they're not designed to handle chat/instruction formats
+            return user_content
+        
+        # For chat/instruct models like Mistral, Llama, etc.
         result = ""
         for msg in messages:
             role = msg["role"]
@@ -245,14 +414,23 @@ class HuggingFaceAdapter(LLMAdapter):
     
     def get_available_models(self) -> List[str]:
         """Get available models (only returns a predefined list as HF has thousands)"""
-        # HF has thousands of models, so we just return popular ones
+        # HF has thousands of models, so we just return popular ones that are more likely to be accessible
         # In a real implementation, you might want to allow specifying a model directly
         return [
+            # Most likely to succeed with basic API access
+            "google/flan-t5-small",  # Small instruction-tuned model
+            "distilgpt2",            # Smaller version of GPT-2, widely accessible
+            "gpt2",                  # Base GPT-2, usually accessible
+            "facebook/opt-125m",     # Smaller OPT model
+            "TinyLlama/TinyLlama-1.1B-Chat-v1.0",  # Small, optimized model
+            # May work depending on account access level
+            "Qwen/Qwen1.5-0.5B-Chat",      # Small Qwen chat model
+            "microsoft/phi-1_5",           # Microsoft's small but effective model
+            "facebook/opt-350m",           # Medium OPT model
+            # Likely needs Pro subscription or special access
+            "HuggingFaceH4/zephyr-7b-beta",
             "mistralai/Mistral-7B-Instruct-v0.1",
-            "meta-llama/Llama-2-7b-chat-hf",
-            "gpt2",
-            "bigcode/starcoder",
-            "bigscience/bloom"
+            "meta-llama/Llama-2-7b-chat-hf"
         ]
 
 class LLMAdapterFactory:

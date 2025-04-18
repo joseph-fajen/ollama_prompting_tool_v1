@@ -48,6 +48,30 @@ For OpenAI or HuggingFace, set up your API keys (only needed once):
 python ollama_prompt.py --setup-keys
 ```
 
+## Provider Compatibility Guide
+
+### Ollama (Recommended for Most Users)
+- **Pros**: No API keys required, local execution, no usage costs
+- **Cons**: Requires local resources for running models
+- **Best Models**: llama3:8b, phi3:mini, codellama:7b-instruct
+- **Use Case**: Everyday usage, development, testing
+
+### OpenAI
+- **Pros**: Professional-grade results, reliable API
+- **Cons**: Requires API key with billing set up
+- **Best Models**: gpt-4o, gpt-3.5-turbo, gpt-4-turbo
+- **Use Case**: Production use, high-quality outputs
+
+### Hugging Face
+- **Pros**: Access to thousands of specialized models
+- **Cons**: Many models have access restrictions or require Pro subscription
+- **Best Models**: 
+  - google/flan-t5-small (instruction-tuned)
+  - distilgpt2 (smaller but accessible)
+  - facebook/opt-125m (smaller OPT model)
+- **Use Case**: Research, specialized applications
+- **Note**: For basic models, avoid using system prompts for best results
+
 ## Common Issues
 
 - **404 Not Found**: Ollama service not running or model name mismatch
