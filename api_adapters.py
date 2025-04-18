@@ -128,6 +128,10 @@ class OpenAIAdapter(LLMAdapter):
     """Adapter for OpenAI-compatible APIs"""
     
     def __init__(self, base_url: str, api_key: str):
+        # Ensure base_url is not None to avoid "No scheme supplied" errors
+        if base_url is None:
+            base_url = "https://api.openai.com"
+            
         self.base_url = base_url
         self.api_key = api_key
         self.session = requests.Session()
