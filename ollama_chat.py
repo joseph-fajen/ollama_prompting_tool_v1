@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich import box
+from error_handler import ErrorHandler
 
 # Import custom modules
 import config_manager
@@ -21,6 +22,17 @@ from api_key_manager import ApiKeyManager
 
 class ChatClient:
     def __init__(self, provider="ollama", **kwargs):
+        # Validate configuration
+        config = config_manager.load_config()
+        if not ErrorHandler.validate_config(config):
+            sys.exit(1)
+
+        # Set up configuration with error handling
+        try:
+            self.base_url = kwargs.get("base_url") or config.get("base_url", "http://localhost:11434")
+        except Exception as e:
+            ErrorHandler.handle_api_error(e, "Loading configuration")
+            sys.exit(1)
         # Set up configuration
         config = config_manager.load_config()
         self.base_url = kwargs.get("base_url") or config.get("base_url", "http://localhost:11434")
@@ -35,13 +47,17 @@ class ChatClient:
         else:
             self.api_key = self.key_manager.get_api_key(provider)
         
-        # Set up adapter
-        self.provider = provider
-        self.adapter = LLMAdapterFactory.create_adapter(
-            provider,
-            base_url=self.base_url,
-            api_key=self.api_key
-        )
+        # Set up adapter with error handling
+        try:
+            self.provider = provider
+            self.adapter = LLMAdapterFactory.create_adapter(
+                provider,
+                base_url=self.base_url,
+                api_key=self.api_key
+            )
+        except Exception as e:
+            ErrorHandler.handle_api_error(e, "Initializing LLM adapter")
+            sys.exit(1)
         
         # Set up conversation manager
         self.conversation_manager = ConversationManager()
